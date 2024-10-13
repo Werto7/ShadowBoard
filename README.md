@@ -1,3 +1,3 @@
-A forum software dor the darknet.
+A forum software for the darknet.
 
 stores data in files instead of database
