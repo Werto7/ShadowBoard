@@ -205,35 +205,16 @@ if (!isset($_POST['form_sent']))
 	<div class="hidden">
 		<input type="hidden" name="form_sent" value="1" />
 	</div>
+
 	<div class="main-subhead">
 		<h2 class="hn"><span><?php echo $lang_install['Part1'] ?></span></h2>
 	</div>
 	<div class="main-content main-frm">
 		<div class="ct-box info-box">
 			<p><?php echo $lang_install['Part1 intro'] ?></p>
-			<ul class="spaced list-clean">
-				<li><span><?php echo $lang_install['Data folder name info'] ?></span></li>
-			</ul>
 		</div>
 		<fieldset class="frm-group group1">
-		<div class="sf-set set2">
-				<div class="sf-box text required">
-					<label for="fld3"><span><?php echo $lang_install['Data folder name'] ?></span> <small><?php echo $lang_install['Data folder name help'] ?></small></label><br />
-					<span class="fld-input"><input id="fld3" type="text" name="req_df_name" size="35" maxlength="50" required /></span>
-				</div>
-		</div>
-	    </fieldset>
-	</div>
-
-	<div class="main-subhead">
-		<h2 class="hn"><span><?php echo $lang_install['Part2'] ?></span></h2>
-	</div>
-	<div class="main-content main-frm">
-		<div class="ct-box info-box">
-			<p><?php echo $lang_install['Part2 intro'] ?></p>
-		</div>
-		<fieldset class="frm-group group1">
-			<legend class="group-legend"><strong><?php echo $lang_install['Part2 legend'] ?></strong></legend>
+			<legend class="group-legend"><strong><?php echo $lang_install['Part1 legend'] ?></strong></legend>
 			<div class="sf-set set1 prepend-top">
 				<div class="sf-box text required">
 					<label for="admin_username"><span><?php echo $lang_install['Admin username'] ?></span> <small><?php echo $lang_install['Username help'] ?></small></label><br />
@@ -249,17 +230,17 @@ if (!isset($_POST['form_sent']))
 		</fieldset>
 	</div>
 	<div class="main-subhead">
-		<h2 class="hn"><span><?php echo $lang_install['Part3'] ?></span></h2>
+		<h2 class="hn"><span><?php echo $lang_install['Part2'] ?></span></h2>
 	</div>
 	<div class="main-content main-frm">
 		<div class="ct-box info-box">
-			<p><?php echo $lang_install['Part3 intro'] ?></p>
+			<p><?php echo $lang_install['Part2 intro'] ?></p>
 			<ul class="spaced list-clean">
 				<li><span><strong><?php echo $lang_install['Base URL'] ?></strong> <?php echo $lang_install['Base URL info'] ?></span></li>
 			</ul>
 		</div>
 		<fieldset class="frm-group group1">
-			<legend class="group-legend"><strong><?php echo $lang_install['Part3 legend'] ?></strong></legend>
+			<legend class="group-legend"><strong><?php echo $lang_install['Part2 legend'] ?></strong></legend>
 			<div class="sf-set set3">
 				<div class="sf-box text required">
 					<label for="fld10"><span><?php echo $lang_install['Base URL'] ?></span> <small><?php echo $lang_install['Base URL help'] ?></small></label><br />
@@ -336,7 +317,12 @@ else
 		return $str;
 	}
 
-    $df_name = forum_trim($_POST['req_df_name']);
+    $df_name = '../../data';
+    if (!is_dir($df_name)) {
+        if (!mkdir($df_name, 0777, true)) {
+            die('Fehler: Der Ordner "' . $df_name . '" konnte nicht erstellt werden.');
+        }
+    }
 	$username = unescape(forum_trim($_POST['req_username']));
 	$password1 = unescape(forum_trim($_POST['req_password1']));
 	$default_lang = preg_replace('#[\.\\\/]#', '', unescape(forum_trim($_POST['req_language'])));
@@ -396,84 +382,84 @@ else
 }
 
 	// Create all files
-    if (!file_exists($df_name.'/bans.txt')) {
-        file_put_contents($df_name.'/bans.txt', "");
+    if (!file_exists($df_name.'/bans.json')) {
+        file_put_contents($df_name.'/bans.json', "");
     }
     
-    if (!file_exists($df_name.'/categories.txt')) {
-        file_put_contents($df_name.'/categories.txt', "");
+    if (!file_exists($df_name.'/categories.json')) {
+        file_put_contents($df_name.'/categories.json', "");
     }
 
-    if (!file_exists($df_name.'/censoring.txt')) {
-        file_put_contents($df_name.'/censoring.txt', "");
+    if (!file_exists($df_name.'/censoring.json')) {
+        file_put_contents($df_name.'/censoring.json', "");
     }
 
-    if (!file_exists($df_name.'/config.txt')) {
-        file_put_contents($df_name.'/config.txt', "");
+    if (!file_exists($df_name.'/config.json')) {
+        file_put_contents($df_name.'/config.json', "");
     }
 
-    if (!file_exists($df_name.'/extensions.txt')) {
-        file_put_contents($df_name.'/extensions.txt', "");
+    if (!file_exists($df_name.'/extensions.json')) {
+        file_put_contents($df_name.'/extensions.json', "");
     }
     
-    if (!file_exists($df_name.'/extension_hooks.txt')) {
-        file_put_contents($df_name.'/extension_hooks.txt', "");
+    if (!file_exists($df_name.'/extension_hooks.json')) {
+        file_put_contents($df_name.'/extension_hooks.json', "");
     }
     
-    if (!file_exists($df_name.'/forum_perms.txt')) {
-        file_put_contents($df_name.'/forum_perms.txt', "");
+    if (!file_exists($df_name.'/forum_perms.json')) {
+        file_put_contents($df_name.'/forum_perms.json', "");
     }
     
-    if (!file_exists($df_name.'/forums.txt')) {
-        file_put_contents($df_name.'/forums.txt', "");
+    if (!file_exists($df_name.'/forums.json')) {
+        file_put_contents($df_name.'/forums.json', "");
     }
     
-    if (!file_exists($df_name.'/groups.txt')) {
-        file_put_contents($df_name.'/groups.txt', "");
+    if (!file_exists($df_name.'/groups.json')) {
+        file_put_contents($df_name.'/groups.json', "");
     }
     
-    if (!file_exists($df_name.'/online.txt')) {
-        file_put_contents($df_name.'/online.txt', "");
+    if (!file_exists($df_name.'/online.json')) {
+        file_put_contents($df_name.'/online.json', "");
     }
     
-    if (!file_exists($df_name.'/posts.txt')) {
-        file_put_contents($df_name.'/posts.txt', "");
+    if (!file_exists($df_name.'/posts.json')) {
+        file_put_contents($df_name.'/posts.json', "");
     }
     
-    if (!file_exists($df_name.'/ranks.txt')) {
-        file_put_contents($df_name.'/ranks.txt', "");
+    if (!file_exists($df_name.'/ranks.json')) {
+        file_put_contents($df_name.'/ranks.json', "");
     }
 
-    if (!file_exists($df_name.'/reports.txt')) {
-        file_put_contents($df_name.'/reports.txt', "");
+    if (!file_exists($df_name.'/reports.json')) {
+        file_put_contents($df_name.'/reports.json', "");
     }
 
-    if (!file_exists($df_name.'/search_cache.txt')) {
-        file_put_contents($df_name.'/search_cache.txt', "");
+    if (!file_exists($df_name.'/search_cache.json')) {
+        file_put_contents($df_name.'/search_cache.json', "");
     }
 
-    if (!file_exists($df_name.'/search_matches.txt')) {
-        file_put_contents($df_name.'/search_matches.txt', "");
+    if (!file_exists($df_name.'/search_matches.json')) {
+        file_put_contents($df_name.'/search_matches.json', "");
     }
 
-    if (!file_exists($df_name.'/search_words.txt')) {
-        file_put_contents($df_name.'/search_words.txt', "");
+    if (!file_exists($df_name.'/search_words.json')) {
+        file_put_contents($df_name.'/search_words.json', "");
     }
 
-if (!file_exists($df_name.'/subscriptions.txt')) {
-        file_put_contents($df_name.'/subscriptions.txt', "");
+    if (!file_exists($df_name.'/subscriptions.json')) {
+        file_put_contents($df_name.'/subscriptions.json', "");
     }
 
-    if (!file_exists($df_name.'/forum_subscriptions.txt')) {
-        file_put_contents($df_name.'/forum_subscriptions.txt', "");
+    if (!file_exists($df_name.'/forum_subscriptions.json')) {
+        file_put_contents($df_name.'/forum_subscriptions.json', "");
     }
 
-    if (!file_exists($df_name.'/topics.txt')) {
-        file_put_contents($df_name.'/topics.txt', "");
+    if (!file_exists($df_name.'/topics.json')) {
+        file_put_contents($df_name.'/topics.json', "");
     }
 
-    if (!file_exists($df_name.'/users.txt')) {
-        file_put_contents($df_name.'/users.txt', "");
+    if (!file_exists($df_name.'/users.json')) {
+        file_put_contents($df_name.'/users.json', "");
     }
 
 	$now = time();
@@ -486,7 +472,16 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\'Administrators\', \'Administrator\', 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1'
 	);
 	
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
     $query = array(
 		'INSERT'	=> 'g_title, g_user_title, g_moderator, g_mod_edit_users, g_mod_rename_users, g_mod_change_passwords, g_mod_ban_users, g_read_board, g_view_users, g_post_replies, g_post_topics, g_edit_posts, g_delete_posts, g_delete_topics, g_set_title, g_search, g_search_users, g_send_email, g_post_flood, g_search_flood, g_email_flood, g_id',
@@ -494,7 +489,16 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\'Guest\', NULL, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 60, 30, 0, 2'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$query = array(
 		'INSERT'	=> 'g_title, g_user_title, g_moderator, g_mod_edit_users, g_mod_rename_users, g_mod_change_passwords, g_mod_ban_users, g_read_board, g_view_users, g_post_replies, g_post_topics, g_edit_posts, g_delete_posts, g_delete_topics, g_set_title, g_search, g_search_users, g_send_email, g_post_flood, g_search_flood, g_email_flood, g_id',
@@ -502,7 +506,16 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\'Members\', NULL, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 60, 30, 60, 3'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$query = array(
 		'INSERT'	=> 'g_title, g_user_title, g_moderator, g_mod_edit_users, g_mod_rename_users, g_mod_change_passwords, g_mod_ban_users, g_read_board, g_view_users, g_post_replies, g_post_topics, g_edit_posts, g_delete_posts, g_delete_topics, g_set_title, g_search, g_search_users, g_send_email, g_post_flood, g_search_flood, g_email_flood, g_id',
@@ -510,26 +523,61 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\'Moderators\', \'Moderator\', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 4'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	// Insert guest and first admin user
 	$query = array(
-		'INSERT'	=> 'group_id, username, password, email, id',
+		'INSERT'	=> 'group_id, username, password, id',
 		'INTO'		=> 'users',
-		'VALUES'	=> '2, \'Guest\', \'Guest\', \'Guest\', 1'
+		'VALUES'	=> '2, \'Guest\', \'Guest\', 1'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$salt = random_key(12);
 	
 	$query = array(
-		'INSERT'	=> 'group_id, username, password, language, num_posts, last_post, registered, last_visit, salt',
-		'INTO'		=> 'users',
-		'VALUES'	=> '1, \''.$forum_df->escape($username).'\', \''.forum_hash($password1, $salt).'\', \''.$forum_df->escape($default_lang).'\', 1, '.$now.', '.$now.', '.$now.', \''.$forum_df->escape($salt).'\''
-	);
+	    'INSERT'	=> 'group_id, username, password, language, num_posts, last_post, registered, last_visit, salt',
+	    'INTO'		=> 'users',
+	    'VALUES'	=> array(
+		    1,
+		    $forum_df->escape($username),
+		    forum_hash($password1, $salt),
+		    $forum_df->escape($default_lang),
+		    1,
+		    $now,
+		    $now,
+		    $now,
+		    $forum_df->escape($salt)
+	    )
+    );
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $data    = array_combine($columns, $query['VALUES']);
+
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 	
 	$new_uid = $forum_df->get_new_uid();
 
@@ -617,17 +665,12 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'o_show_moderators'			=> "'0'",
 		'o_mask_passwords'			=> "'1'"
 	);
-
-	foreach ($config as $conf_name => $conf_value)
-	{
-		    $query = array(
-			    'INSERT'	=> 'conf_name, conf_value',
-			    'INTO'		=> 'config',
-			    'VALUES'	=> '\''.$conf_name.'\', '.$conf_value.''
-		    );
-
-		    $forum_df->data_build($query) or error(__FILE__, __LINE__);
-	}
+	
+	try {
+        $forum_df->write_to_file($config, 'config');
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	// Insert some other default data
 	$query = array(
@@ -636,7 +679,16 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\''.$lang_install['Default category name'].'\', 1'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$query = array(
 		'INSERT'	=> 'forum_name, forum_desc, num_topics, num_posts, last_post, last_post_id, last_poster, disp_position, cat_id',
@@ -644,7 +696,16 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\''.$lang_install['Default forum name'].'\', \''.$lang_install['Default forum descrip'].'\', 1, 1, '.$now.', 1, \''.$forum_df->escape($username).'\', 1, '.$forum_df->get_new_uid().''
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    // Jetzt speichern
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$query = array(
 		'INSERT'	=> 'poster, subject, posted, first_post_id, last_post, last_post_id, last_poster, forum_id',
@@ -652,15 +713,41 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\''.$forum_df->escape($username).'\', \''.$lang_install['Default topic subject'].'\', '.$now.', 1, '.$now.', 1, \''.$forum_df->escape($username).'\', '.$forum_df->get_new_uid().''
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 	
 	$query = array(
-		'INSERT'	=> 'poster, poster_id, poster_ip, message, posted, topic_id, id',
-		'INTO'		=> 'posts',
-		'VALUES'	=> '\''.$forum_df->escape($username).'\', '.$new_uid.', \'127.0.0.1\', \''.$lang_install['Default post contents'].'\', '.$now.', '.$forum_df->get_new_uid().', 1'
-	);
+        'INSERT' => 'poster, poster_id, poster_ip, message, posted, topic_id, id',
+        'INTO'   => 'posts',
+        'VALUES' => array(
+            $forum_df->escape($username),
+            $new_uid,
+            '127.0.0.1',
+            $lang_install['Default post contents'],
+            $now,
+            $forum_df->get_new_uid(),
+            1
+        )
+    );
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+    // In Spalten umwandeln
+    $columns = array_map('trim', explode(',', $query['INSERT']));
+
+    // Jetzt kombinieren (Spaltenname => Wert)
+    $data = array_combine($columns, $query['VALUES']);
+
+	try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	// Add new post to search table
 	require FORUM_ROOT.'include/search_idx.php';
@@ -673,7 +760,15 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\''.$lang_install['Default rank 1'].'\', 0'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$query = array(
 		'INSERT'	=> 'rank, min_posts',
@@ -681,7 +776,15 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 		'VALUES'	=> '\''.$lang_install['Default rank 2'].'\', 10'
 	);
 
-	$forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$columns = array_map('trim', explode(',', $query['INSERT']));
+    $values  = array_map('trim', explode(',', $query['VALUES']));
+    $data = array_combine($columns, $values);
+
+    try {
+        $forum_df->write_to_file($data, $query['INTO']);
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 
 	$alerts = array();
@@ -748,7 +851,15 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 				'VALUES'	=> '\'pun_repository\', \''.$forum_db->escape($ext_data['extension']['title']).'\', \''.$forum_db->escape($ext_data['extension']['version']).'\', \''.$forum_db->escape($ext_data['extension']['description']).'\', \''.$forum_db->escape($ext_data['extension']['author']).'\', NULL, NULL, \'||\'',
 			);
 
-			$forum_db->query_build($query) or error(__FILE__, __LINE__);
+			$columns = array_map('trim', explode(',', $query['INSERT']));
+            $values  = array_map('trim', explode(',', $query['VALUES']));
+            $data = array_combine($columns, $values);
+
+            try {
+                $forum_df->write_to_file($data, $query['INTO']);
+            } catch (Exception $e) {
+                error($e->getMessage(), __FILE__, __LINE__);
+            }
 
 			if (isset($ext_data['extension']['hooks']['hook']))
 			{
@@ -763,7 +874,15 @@ if (!file_exists($df_name.'/subscriptions.txt')) {
 							'VALUES'	=> '\''.$forum_db->escape(forum_trim($cur_hook)).'\', \'pun_repository\', \''.$forum_db->escape(forum_trim($ext_hook['content'])).'\', '.time().', '.(isset($ext_hook['attributes']['priority']) ? $ext_hook['attributes']['priority'] : 5)
 						);
 
-						$forum_db->query_build($query) or error(__FILE__, __LINE__);
+						$columns = array_map('trim', explode(',', $query['INSERT']));
+                        $values  = array_map('trim', explode(',', $query['VALUES']));
+                        $data = array_combine($columns, $values);
+
+                        try {
+                            $forum_df->write_to_file($data, $query['INTO']);
+                        } catch (Exception $e) {
+                            error($e->getMessage(), __FILE__, __LINE__);
+                        }
 					}
 				}
 			}
