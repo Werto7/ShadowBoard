@@ -156,7 +156,15 @@ function update_search_index($mode, $post_id, $message, $subject = null)
 			);
 
 			($hook = get_hook('si_fn_update_search_index_qr_insert_words')) ? eval($hook) : null;
-			$forum_df->data_build($query) or error(__FILE__, __LINE__);
+			$columns = array_map('trim', explode(',', $query['INSERT']));
+            $values  = array_map('trim', explode(',', $query['VALUES']));
+            $data = array_combine($columns, $values);
+	
+	        try {
+                $forum_df->write_to_file($data, $query['INTO']);
+            } catch (Exception $e) {
+                error($e->getMessage(), __FILE__, __LINE__);
+            }
 		}
 	}
 

@@ -29,47 +29,6 @@
         {
             return $this->new_uid;
         }
-        
-        public function data_build($query, $return_data_string = false, $unbuffered = false)
-	    {
-		    $file_path = $this->df_name . "/";
-
-            if (isset($query['SELECT'])) {
-                $where_condition = isset($query['WHERE']) ? $query['WHERE'] : null;
-                $results = $this->read_from_file($file_path.$query['FROM'].'.txt', $where_condition);
-                return $return_data_string ? json_encode($results) : $results;
-            } 
-            else if (isset($query['INSERT'])) {
-                $values = is_array($query['VALUES']) ? $query['VALUES'] : [$query['VALUES']];
-
-                //Special treatment for search_words.txt
-                if ($query['INTO'] === 'search_words') {
-                    //Save words line by line
-                    foreach ($values as $value) {
-                        $value = trim($value, '"'); //Remove extra quotation marks
-                        file_put_contents($file_path . $query['INTO'] . '.txt', $value.PHP_EOL, FILE_APPEND);
-                    }
-                } else {
-                    //Default saving for other files
-                    $data_to_save = json_encode($values);
-                    $this->write_to_file($file_path.$query['INTO'].'.txt', $data_to_save);
-                }
-                
-                $file_content = file($file_path.$query['INTO'].'.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-                $this->new_uid = count($file_content) + 1;
-            }
-            else if (isset($query['UPDATE'])) {
-                $where_condition = isset($query['WHERE']) ? $query['WHERE'] : null;
-                $new_data = $query['SET'];
-                $this->update_file($file_path, $new_data, $where_condition);
-            } 
-            else if (isset($query['DELETE'])) {
-                $where_condition = isset($query['WHERE']) ? $query['WHERE'] : null;
-                $this->delete_from_file($file_path, $where_condition);
-            }
-
-            return true;
-	    }
 	
 	    private function read_from_file($file_path, $where_condition = null)
         {
@@ -92,9 +51,38 @@
             return $results;
         }
         
-        private function write_to_file($file_path, $data)
+        public function write_to_file($json_array, $filename_without_extension)
         {
-            file_put_contents($file_path, $data . PHP_EOL, FILE_APPEND);
+            $file_path = $this->df_name . '/' . $filename_without_extension . '.json';
+
+            $data_list = [];
+
+            if (file_exists($file_path)) {
+                $existing_content = file_get_contents($file_path);
+                if (trim($existing_content) !== '') {
+                        $existing_array = json_decode($existing_content, true);
+
+                        if (!is_array($existing_array)) {
+                            throw new Exception('Bestehende Datei enthält ungültiges JSON.');
+                        }
+
+                        // Falls alles okay ist: bestehende Daten übernehmen
+                        $data_list = $existing_array;
+                }
+            }
+
+            // Neues Objekt hinzufügen
+            $data_list[] = $json_array;
+
+            $json_string = json_encode($data_list, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+            if ($json_string === false) {
+                throw new Exception('Fehler beim Umwandeln in JSON: ' . json_last_error_msg());
+            }
+
+            if (file_put_contents($file_path, $json_string) === false) {
+                throw new Exception('Fehler beim Schreiben in Datei: ' . $file_path);
+            }
         }
         
         private function update_file($file_path, $new_data, $where_condition)
@@ -133,22 +121,6 @@
             file_put_contents($file_path, implode(PHP_EOL, $updated_content) . PHP_EOL);
         }
         
-        private function apply_condition($data, $condition)
-        {
-            //Example: word IN('example1', 'example2')
-            if (preg_match('/(\w+)\s+IN\((.+)\)/', $condition, $matches)) {
-                $field = $matches[1]; //The field being checked (e.g. 'word')
-                $values = explode(',', str_replace("'", '', $matches[2])); //Values ​​against which the test is carried out
-
-                //Check if the field exists and contains one of the values
-                if (isset($data[$field]) && in_array($data[$field], $values)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-        
         public function fetch_assoc($result = null)
         {
             //Check if a new result array has been passed
@@ -182,6 +154,5 @@
             // No further result, return false
             return false;
         }
-
     }
 ?>
