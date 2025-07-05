@@ -33,12 +33,19 @@ forum_remove_bad_characters();
 if (empty($cookie_name))
 	$cookie_name = 'forum_cookie';
 
+$query = array(
+		'SELECT'	=> 'c.*',
+		'FROM'		=> 'config'
+	);
+$result = $forum_df->fetch_all_from_file($query['FROM']);
+    
+$forum_config = $result[0];
+
 // Enable output buffering
 if (!defined('FORUM_DISABLE_BUFFERING'))
 {
 	// For some very odd reason, "Norton Internet Security" unsets this
 	$_SERVER['HTTP_ACCEPT_ENCODING'] = isset($_SERVER['HTTP_ACCEPT_ENCODING']) ? $_SERVER['HTTP_ACCEPT_ENCODING'] : '';
-
 	// Should we use gzip output compression?
 	if ($forum_config['o_gzip'] && extension_loaded('zlib') && (strpos($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip') !== false || strpos($_SERVER['HTTP_ACCEPT_ENCODING'], 'deflate') !== false))
 		ob_start('ob_gzhandler');
@@ -58,6 +65,7 @@ $forum_user = array();
 cookie_login($forum_user);
 
 // Attempt to load the common language file
+$forum_user['language'] = trim($forum_user['language'], "'");
 if (file_exists(FORUM_ROOT.'lang/'.$forum_user['language'].'/common.php'))
 	include FORUM_ROOT.'lang/'.$forum_user['language'].'/common.php';
 else
@@ -73,7 +81,7 @@ else
 ($hook = get_hook('co_modify_url_scheme')) ? eval($hook) : null;
 
 // Check if we are to display a maintenance message
-if ($forum_config['o_maintenance'] && $forum_user['g_id'] > FORUM_ADMIN && !defined('FORUM_TURN_OFF_MAINT'))
+if ((int)$forum_config['o_maintenance'] === 1 && (int)$forum_user['g_id'] > FORUM_ADMIN && !defined('FORUM_TURN_OFF_MAINT'))
 	maintenance_message();
 
 // Load cached updates info

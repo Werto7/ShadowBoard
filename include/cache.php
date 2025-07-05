@@ -67,14 +67,14 @@ function generate_config_cache()
 	if ($return !== null)
 		return;
 
-	// Get the forum config from the DB
+	// Get the forum config from the DF
 	$query = array(
 		'SELECT'	=> 'c.*',
 		'FROM'		=> 'config'
 	);
 
 	($hook = get_hook('ch_fn_generate_config_cache_qr_get_config')) ? eval($hook) : null;
-	$result = $forum_df->data_build($query) or error(__FILE__, __LINE__);
+	$result = $forum_df->fetch_all_from_file($query['FROM']) or error(__FILE__, __LINE__);
     
 	$output = array();
 	foreach ($result as $item) {
@@ -103,30 +103,47 @@ function generate_config_cache()
 //
 function generate_bans_cache()
 {
-	global $forum_db;
+	global $forum_df;
 
 	$return = ($hook = get_hook('ch_fn_generate_bans_cache_start')) ? eval($hook) : null;
 	if ($return !== null)
 		return;
 
-	// Get the ban list from the DB
-	$query = array(
-		'SELECT'	=> 'b.*, u.username AS ban_creator_username',
-		'FROM'		=> 'bans AS b',
-		'JOINS'		=> array(
-			array(
-				'LEFT JOIN'		=> 'users AS u',
-				'ON'			=> 'u.id=b.ban_creator'
-			)
-		),
-		'ORDER BY'	=> 'b.id'
-	);
+	// Get the ban list from the DF
+	$bans = $forum_df->fetch_all_from_file('bans');
+    $users = $forum_df->fetch_all_from_file('users');
+
+    // Indexiere Benutzer nach ID für schnellen Zugriff
+    $user_map = array_column($users, null, 'id');
+
+    // Ergebnisliste vorbereiten
+    $results = [];
+
+    foreach ($bans as $ban) {
+    	$ban_creator_id = $ban['ban_creator'];
+
+        // Füge username hinzu, wenn Nutzer existiert
+        $ban['ban_creator_username'] = isset($user_map[$ban_creator_id])
+            ? $user_map[$ban_creator_id]['username']
+            : null; // LEFT JOIN = NULL, wenn nicht vorhanden
+
+        $results[] = $ban;
+    }
+
+    // Optional: nach b.id sortieren
+    usort($results, function ($a, $b) {
+    	return $a['id'] <=> $b['id'];
+    });
 
 	($hook = get_hook('ch_fn_generate_bans_cache_qr_get_bans')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
+	try {
+        $result = $results;
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$output = array();
-	while ($cur_ban = $forum_db->fetch_assoc($result))
+	while ($cur_ban = $forum_df->fetch_assoc($result))
 		$output[] = $cur_ban;
 
 	// Output ban list as PHP code
@@ -175,7 +192,7 @@ function generate_ranks_cache()
 //
 function generate_stats_cache()
 {
-	global $forum_db;
+	global $forum_df;
 
 	$stats = array();
 
@@ -190,36 +207,74 @@ function generate_stats_cache()
 		'WHERE'		=> 'u.group_id != '.FORUM_UNVERIFIED
 	);
 
+    //FROM: Extract file name (e.g. 'users' from 'users AS u')
+    if (preg_match('/^(\w+)\s+AS\s+\w+$/', $query['FROM'], $matches)) {
+    	$filename = $matches[1]; // "users"
+    } else {
+    	throw new Exception("FROM clause not recognized: ".$query['FROM']);
+    }
+
+    $entries = $forum_df->fetch_all_from_file($filename);
+
+    if (preg_match('/u\.group_id\s*!=\s*(\d+)/', $query['WHERE'], $matches)) {
+    	$excluded_group = (int)$matches[1];
+    } else {
+    	throw new Exception("WHERE clause not recognized: ".$query['WHERE']);
+    }
+
+    $count = 0;
+    foreach ($entries as $entry) {
+    	if (!isset($entry['group_id'])) continue;
+        if ((int)$entry['group_id'] !== $excluded_group) {
+        	$count++;
+        }
+    }
+
+    $result = max(0, $count - 1); //analogous to SQL: COUNT(u.id) - 1
+
 	($hook = get_hook('ch_fn_generate_stats_cache_qr_get_user_count')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-	$stats['total_users'] = $forum_db->result($result);
+	$stats['total_users'] = $result;
 
 
 	// Get last registered user info
-	$query = array(
-		'SELECT'	=> 'u.id, u.username',
-		'FROM'		=> 'users AS u',
-		'WHERE'		=> 'u.group_id != '.FORUM_UNVERIFIED,
-		'ORDER BY'	=> 'u.registered DESC',
-		'LIMIT'		=> '1'
-	);
+	$users = $forum_df->fetch_all_from_file('users');
+
+    $filtered_users = array_filter($users, function ($user) {
+    	return isset($user['group_id']) && (int)$user['group_id'] !== FORUM_UNVERIFIED;
+    });
+    
+    $filtered_users = array_filter($filtered_users, function ($user) {
+    	return isset($user['registered']);
+    });
+
+    usort($filtered_users, function ($a, $b) {
+    	return $b['registered'] <=> $a['registered'];
+    });
+
+    $latest_user = reset($filtered_users); // gibt das erste Element oder false
 
 	($hook = get_hook('ch_fn_generate_stats_cache_qr_get_newest_user')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-	$stats['last_user'] = $forum_db->fetch_assoc($result);
+	$stats['last_user'] = $latest_user;
 
 	// Get num topics and posts
-	$query = array(
-		'SELECT'	=> 'SUM(f.num_topics) AS num_topics, SUM(f.num_posts) AS num_posts',
-		'FROM'		=> 'forums AS f'
-	);
+	$forums = $forum_df->fetch_all_from_file('forums');
+
+    $sum_num_topics = 0;
+    $sum_num_posts = 0;
+
+    foreach ($forums as $forum) {
+    	if (isset($forum['num_topics']) && is_numeric($forum['num_topics'])) {
+    	    $sum_num_topics += (int)$forum['num_topics'];
+        }
+        if (isset($forum['num_posts']) && is_numeric($forum['num_posts'])) {
+        	$sum_num_posts += (int)$forum['num_posts'];
+        }
+    }
 
 	($hook = get_hook('ch_fn_generate_stats_cache_qr_get_post_stats')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
 
-	$stats_topics_and_posts = $forum_db->fetch_assoc($result);
-	$stats['total_topics'] = $stats_topics_and_posts['num_topics'];
-	$stats['total_posts'] = $stats_topics_and_posts['num_posts'];
+	$stats['total_topics'] = $sum_num_topics;
+    $stats['total_posts'] = $sum_num_posts;
 
 	$stats['cached'] = time();
 
@@ -450,22 +505,63 @@ function generate_hooks_cache()
 	if ($return !== null)
 		return;
 
-	// Get the hooks from the DB
-	$query = array(
-		'SELECT'	=> 'eh.id, eh.code, eh.extension_id, e.dependencies',
-		'FROM'		=> 'extension_hooks AS eh',
-		'JOINS'		=> array(
-			array(
-				'INNER JOIN'	=> 'extensions AS e',
-				'ON'			=> 'e.id=eh.extension_id'
-			)
-		),
-		'WHERE'		=> 'e.disabled=0',
-		'ORDER BY'	=> 'eh.priority, eh.installed'
-	);
+	// Get the hooks from the DF
+	//1. Load data
+    $eh_data = $forum_df->fetch_all_from_file("extension_hooks"); // eh = extension_hooks
+    $e_data  = $forum_df->fetch_all_from_file("extensions");      // e = extensions
+
+    //2. Build index for extensions (by id) to be able to do JOIN quickly
+    $e_index = [];
+    foreach ($e_data as $e_entry) {
+        $e_index[$e_entry['id']] = $e_entry;
+    }
+
+    //3. Manual JOIN + WHERE
+    $joined = [];
+    foreach ($eh_data as $eh_entry) {
+        $e_id = $eh_entry['extension_id'];
+    
+        if (!isset($e_index[$e_id])) continue;
+
+        $e_entry = $e_index[$e_id];
+
+        // WHERE e.disabled = 0
+        if ($e_entry['disabled'] != 0) continue;
+
+        //Assemble JOIN result
+        $joined[] = [
+            'eh' => $eh_entry,
+            'e'  => $e_entry
+        ];
+    }
+
+    // 4. ORDER BY eh.priority, eh.installed
+    usort($joined, function($a, $b) {
+        //Compare by priority
+        $prio_cmp = $a['eh']['priority'] <=> $b['eh']['priority'];
+        if ($prio_cmp !== 0) return $prio_cmp;
+
+        //If equal: by installed
+        return $a['eh']['installed'] <=> $b['eh']['installed'];
+    });
+
+    // 5. SELECT eh.id, eh.code, eh.extension_id, e.dependencies
+    $results = [];
+    foreach ($joined as $row) {
+        $results[] = [
+            $row['eh']['id'],
+            $row['eh']['code'],
+            $row['eh']['extension_id'],
+            $row['e']['dependencies']
+        ];
+    }
 
 	($hook = get_hook('ch_fn_generate_hooks_cache_qr_get_hooks')) ? eval($hook) : null;
-	$result = $forum_df->data_build($query) or error(__FILE__, __LINE__);
+	try {
+        $result = $results;
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$output = array();
 	while ($cur_hook = $forum_df->fetch_assoc($result))

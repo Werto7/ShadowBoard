@@ -149,22 +149,32 @@ function update_search_index($mode, $post_id, $message, $subject = null)
 		$new_words = array_diff($unique_words, $existing_words);
 		if (!empty($new_words))
 		{
-			$query = array(
-				'INSERT'	=> 'word',
-				'INTO'		=> 'search_words',
-				'VALUES'	=> preg_replace('#^(.*)$#', '\'\1\'', array_map(array($forum_df, 'escape'), $new_words))
-			);
+			// escape + quote
+            $quoted = preg_replace(
+                '#^(.*)$#',
+                '\'\1\'',
+                array_map(array($forum_df, 'escape'), $new_words)
+            );
+           //and now implode so that VALUES becomes a string
+          $query = array(
+              'INSERT' => 'word',
+              'INTO'   => 'search_words',
+              'VALUES' => implode(',', $quoted)
+          );
 
 			($hook = get_hook('si_fn_update_search_index_qr_insert_words')) ? eval($hook) : null;
 			$columns = array_map('trim', explode(',', $query['INSERT']));
-            $values  = array_map('trim', explode(',', $query['VALUES']));
-            $data = array_combine($columns, $values);
-	
-	        try {
-                $forum_df->write_to_file($data, $query['INTO']);
-            } catch (Exception $e) {
-                error($e->getMessage(), __FILE__, __LINE__);
-            }
+            $values_string = is_array($query['VALUES']) ? implode(',', $query['VALUES']) : $query['VALUES'];
+            $values_string = trim($values_string);
+
+             //Here NO explode on $values_string, but wrap it directly:
+             $data = array_combine($columns, array($values_string));
+
+             try {
+                 $forum_df->write_to_file($data, $query['INTO']);
+              } catch (Exception $e) {
+                  error($e->getMessage(), __FILE__, __LINE__);
+              }
 		}
 	}
 
@@ -202,11 +212,30 @@ function update_search_index($mode, $post_id, $message, $subject = null)
 			$sql = array(
                 'INSERT'    => 'post_id, word_id, subject_match',
                 'INTO'     =>  'search_matches',
-                'VALUES'     => $forum_df->data_build($subquery, true)
+                'VALUES'     => $forum_df->search_in_file($subquery['FROM'], $subquery['SELECT'], $subquery['WHERE'])
             );
 
 			($hook = get_hook('si_fn_update_search_index_qr_add_matches')) ? eval($hook) : null;
-			$forum_df->data_build($sql) or error(__FILE__, __LINE__);
+			$columns = array_map('trim', explode(',', $sql['INSERT']));
+            $data_rows = [];
+
+            foreach ($sql['VALUES'] as $row) {
+               //Only if row has the correct number of columns
+               if (count($row) === count($columns)) {
+                    $data_rows[] = array_combine($columns, $row);
+                } else {
+                    error_log("Incorrect line: " . print_r($row, true));
+                }
+            }
+
+            //Now write each line individually into the file
+            foreach ($data_rows as $data) {
+                try {
+                    $forum_df->write_to_file($data, $sql['INTO']);
+                } catch (Exception $e) {
+                    error($e->getMessage(), __FILE__, __LINE__);
+                }
+            }
 		}
 	}
 

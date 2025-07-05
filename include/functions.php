@@ -434,13 +434,20 @@ function format_time($timestamp, $type = FORUM_FT_DATETIME, $date_format = null,
 	if ($timestamp == '')
 		return ($no_text ? '' : $lang_common['Never']);
 
-	if ($date_format == null)
-		$date_format = $forum_date_formats[$forum_user['date_format']];
+	if ($date_format === null) {
+		$key = $forum_user['date_format'] ?? '';
+		$date_format = $forum_date_formats[$key] ?? 'Y-m-d';
+    }
+    
+    if ($time_format === null) {
+    	$key = $forum_user['time_format'] ?? '';
+        $time_format = $forum_time_formats[$key] ?? 'H:i'; // Standard-Zeitformat als Fallback
+    }
 
-	if ($time_format == null)
-		$time_format = $forum_time_formats[$forum_user['time_format']];
+	$timezone = (float) ($forum_user['timezone'] ?? 0);
+	$dst = (float) ($forum_user['dst'] ?? 0);
 
-	$diff = ($forum_user['timezone'] + $forum_user['dst']) * 3600;
+    $diff = ($timezone + $dst) * 3600;
 	$timestamp += $diff;
 	$now = time();
 
@@ -869,7 +876,7 @@ function sef_friendly($str)
 		return $return;
 
 	$str = strtr($str, $lang_url_replace);
-	$str = strtolower(utf8_decode($str));
+	$str = mb_strtolower($str, 'UTF-8');
 	$str = forum_trim(preg_replace(array('/[^a-z0-9\s]/', '/[\s]+/'), array('', '-'), $str), '-');
 
 	foreach ($forum_reserved_strings as $match => $replace)
@@ -1013,7 +1020,7 @@ function validate_username($username, $exclude_id = null)
 // $user must contain the elements 'username', 'title', 'posts', 'g_id' and 'g_user_title'
 function get_title($user)
 {
-	global $forum_db, $forum_config, $forum_bans, $lang_common;
+	global $forum_df, $forum_config, $forum_bans, $lang_common;
 	static $ban_list, $forum_ranks;
 
 	$return = ($hook = get_hook('fn_get_title_start')) ? eval($hook) : null;
@@ -1333,7 +1340,7 @@ function authenticate_user($user, $password, $password_is_hash = false)
 // Attempt to login with the user ID and password hash from the cookie
 function cookie_login(&$forum_user)
 {
-	global $forum_db, $db_type, $forum_config, $cookie_name, $cookie_path, $cookie_domain, $cookie_secure, $forum_time_formats, $forum_date_formats;
+	global $forum_df, $db_type, $forum_config, $cookie_name, $cookie_path, $cookie_domain, $cookie_secure, $forum_time_formats, $forum_date_formats;
 
 	$now = time();
 	$expire = $now + 1209600;	// The cookie expires after 14 days
@@ -1478,7 +1485,7 @@ function cookie_login(&$forum_user)
 // Fill $forum_user with default values (for guests)
 function set_default_user()
 {
-	global $forum_db, $db_type, $forum_user, $forum_config;
+	global $forum_df, $db_type, $forum_user, $forum_config;
 
 	$remote_addr = get_remote_address();
 
@@ -1487,28 +1494,66 @@ function set_default_user()
 		return;
 
 	// Fetch guest user
-	$query = array(
-		'SELECT'	=> 'u.*, g.*, o.logged, o.csrf_token, o.prev_url, o.last_post, o.last_search',
-		'FROM'		=> 'users AS u',
-		'JOINS'		=> array(
-			array(
-				'INNER JOIN'	=> 'groups AS g',
-				'ON'			=> 'g.g_id=u.group_id'
-			),
-			array(
-				'LEFT JOIN'		=> 'online AS o',
-				'ON'			=> 'o.ident=\''.$forum_db->escape($remote_addr).'\''
-			)
-		),
-		'WHERE'		=> 'u.id=1'
-	);
+	$remote_addr = $_SERVER['REMOTE_ADDR'];
+
+    //Read files
+    $users  = $forum_df->fetch_all_from_file('users');
+    $groups = $forum_df->fetch_all_from_file('groups');
+    $online = $forum_df->fetch_all_from_file('online');
+
+    //Step 1: Find users with id = 1
+    $target_user = null;
+    foreach ($users as $user) {
+        if (isset($user['id']) && $user['id'] == 1) {
+            $target_user = $user;
+            break;
+        }
+    }
+
+    if (!$target_user) {
+        throw new Exception("User with ID 1 not found.");
+    }
+
+    //Step 2: Load the matching group (INNER JOIN g.g_id = u.group_id)
+    $target_group = null;
+    foreach ($groups as $group) {
+        if (isset($group['g_id']) && $group['g_id'] == $target_user['group_id']) {
+            $target_group = $group;
+            break;
+        }
+    }
+
+    if (!$target_group) {
+        throw new Exception("Group for user not found.");
+    }
+
+    //Step 3: optionally find online data (LEFT JOIN on o.ident = $remote_addr)
+    $target_online = null;
+    foreach ($online as $entry) {
+        if (isset($entry['ident']) && $entry['ident'] === $remote_addr) {
+            $target_online = $entry;
+            break;
+        }
+    }
+
+    //Step 4: Assemble everything (note the SELECT fields)
+    $result = array_merge($target_user, $target_group);
+
+    if ($target_online) {
+        foreach (['logged', 'csrf_token', 'prev_url', 'last_post', 'last_search'] as $field) {
+            $result[$field] = $target_online[$field] ?? null;
+        }
+    } else {
+        foreach (['logged', 'csrf_token', 'prev_url', 'last_post', 'last_search'] as $field) {
+            $result[$field] = null; //Because LEFT JOIN → leave fields empty
+        }
+    }
 
 	($hook = get_hook('fn_set_default_user_qr_get_default_user')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-	$forum_user = $forum_db->fetch_assoc($result);
+	$forum_user = $forum_df->fetch_assoc([$result]);
 
 	if (!$forum_user)
-		exit('Unable to fetch guest information. The table \''.$forum_db->prefix.'users\' must contain an entry with id = 1 that represents anonymous users.');
+		exit('Unable to fetch guest information. The .json file \''.$forum_df->prefix.'users\' must contain an entry with id = 1 that represents anonymous users.'.json_encode($result));
 
 	if (!defined('FORUM_QUIET_VISIT'))
 	{
@@ -1520,36 +1565,66 @@ function set_default_user()
 			$forum_user['prev_url'] = get_current_url(255);
 
 			// REPLACE INTO avoids a user having two rows in the online table
-			$query = array(
-				'REPLACE'	=> 'user_id, ident, logged, csrf_token',
-				'INTO'		=> 'online',
-				'VALUES'	=> '1, \''.$forum_db->escape($remote_addr).'\', '.$forum_user['logged'].', \''.$forum_user['csrf_token'].'\'',
-				'UNIQUE'	=> 'user_id=1 AND ident=\''.$forum_db->escape($remote_addr).'\''
-			);
+			$filename = 'online';
 
-			if ($forum_user['prev_url'] != null)
-			{
-				$query['REPLACE'] .= ', prev_url';
-				$query['VALUES'] .= ', \''.$forum_db->escape($forum_user['prev_url']).'\'';
-			}
+            //Prepare basic data
+            $new_entry = [
+                'user_id'=>'1',
+                'ident'      => $forum_df->escape($remote_addr),
+                'logged'     => $forum_user['logged'],
+                'csrf_token' => $forum_user['csrf_token']
+            ];
+
+
+            //Add optional field 'prev_url'
+            if (!empty($forum_user['prev_url'])) {
+            	$new_entry['prev_url'] = $forum_df->escape($forum_user['prev_url']);
+            }
+
+            //Load old entries
+            try {
+            	$entries = $forum_df->fetch_all_from_file($filename);
+            } catch (Exception $e) {
+            	$entries = []; //File does not exist yet
+            }
+
+             // UNIQUE: user_id + ident → Replace entry
+            $entries = array_filter($entries, function($entry) use ($new_entry) {
+            	return !(
+                    isset($entry['user_id'], $entry['ident']) &&
+                    $entry['user_id'] === $new_entry['user_id'] &&
+                    $entry['ident'] === $new_entry['ident']
+                );
+            });
+
+            //Add new entry
+            $entries[] = $new_entry;
+
+            //Write back
+            file_put_contents(
+                $forum_df->df_name . '/' . $filename . '.json',
+                json_encode($entries, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            );
 
 			($hook = get_hook('fn_set_default_user_qr_add_online_guest_user')) ? eval($hook) : null;
-			$forum_db->query_build($query) or error(__FILE__, __LINE__);
 		}
 		else
 		{
-			$query = array(
-				'UPDATE'	=> 'online',
-				'SET'		=> 'logged='.time(),
-				'WHERE'		=> 'ident=\''.$forum_db->escape($remote_addr).'\''
-			);
-
+			$escaped_ident = $forum_df->escape($remote_addr);
 			$current_url = get_current_url(255);
-			if ($current_url != null)
-				$query['SET'] .= ', prev_url=\''.$forum_db->escape($current_url).'\'';
+			$escaped_url = $current_url !== null ? $forum_df->escape($current_url) : null;
+
+            $forum_df->update_entries_in_file('online', 'logged', time(), function ($entry) use ($escaped_ident) {
+            	return isset($entry['ident']) && $entry['ident'] === $escaped_ident;
+            });
+
+            if ($escaped_url !== null) {
+            	$forum_df->update_entries_in_file('online', 'prev_url', $escaped_url, function ($entry) use ($escaped_ident) {
+            	    return isset($entry['ident']) && $entry['ident'] === $escaped_ident;
+                });
+            }
 
 			($hook = get_hook('fn_set_default_user_qr_update_online_guest_user')) ? eval($hook) : null;
-			$forum_db->query_build($query) or error(__FILE__, __LINE__);
 		}
 	}
 
@@ -1659,7 +1734,7 @@ function check_bans()
 // Update "Users online"
 function update_users_online()
 {
-	global $forum_db, $forum_config, $forum_user;
+	global $forum_df, $forum_config, $forum_user;
 
 	$now = time();
 
@@ -1669,18 +1744,30 @@ function update_users_online()
 
 
 	// Fetch all online list entries that are older than "o_timeout_online"
-	$query = array(
-		'SELECT'	=> 'o.*',
-		'FROM'		=> 'online AS o',
-		'WHERE'		=> 'o.logged < '.($now - $forum_config['o_timeout_online'])
-	);
+	$timeout_limit = $now - (int)$forum_config['o_timeout_online'];
+
+    //Load all "online" entries
+    $online_entries = $forum_df->fetch_all_from_file('online');
+
+    //Filtered results like WHERE
+    $filtered = [];
+
+    foreach ($online_entries as $entry) {
+    	if (isset($entry['logged']) && (int)$entry['logged'] < $timeout_limit) {
+    	    $filtered[] = $entry; // entspricht SELECT o.*
+        }
+    }
 
 	($hook = get_hook('fn_update_users_online_qr_get_old_online_users')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
+	try {
+        $result = $filtered;
+    } catch (Exception $e) {
+        error($e->getMessage(), __FILE__, __LINE__);
+    }
 
 	$need_delete_expired_guest = false;
 	$expired_users_id = $idle_users_id = array();
-	while ($cur_user = $forum_db->fetch_assoc($result))
+	while ($cur_user = $forum_df->fetch_assoc($result))
 	{
 		if ($cur_user['user_id'] != '1')
 		{
@@ -3109,7 +3196,7 @@ function message($message, $link = '', $heading = '')
 // Display a message when board is in maintenance mode
 function maintenance_message()
 {
-	global $forum_db, $forum_config, $lang_common, $forum_user, $base_url, $forum_loader;
+	global $forum_df, $forum_config, $lang_common, $forum_user, $base_url, $forum_loader;
 
 	$return = ($hook = get_hook('fn_maintenance_message_start')) ? eval($hook) : null;
 	if ($return !== null)
@@ -3119,6 +3206,7 @@ function maintenance_message()
 	$pattern = array("\t\t", '  ', '  ');
 	$replace = array('&#160; &#160; ', '&#160; ', ' &#160;');
 	$message = str_replace($pattern, $replace, $forum_config['o_maintenance_message']);
+    $message = trim($message, "'");
 
 	// Send the Content-type header in case the web server is setup to send something else
 	header('Content-type: text/html; charset=utf-8');
@@ -3176,11 +3264,6 @@ function maintenance_message()
 	ob_end_clean();
 	// END SUBST - <!-- forum_maint_main -->
 
-
-	// End the transaction
-	$forum_db->end_transaction();
-
-
 	// START SUBST - <!-- forum_include "*" -->
 	while (preg_match('#<!-- ?forum_include "([^/\\\\]*?)" ?-->#', $tpl_maint, $cur_include))
 	{
@@ -3194,10 +3277,6 @@ function maintenance_message()
 		ob_end_clean();
 	}
 	// END SUBST - <!-- forum_include "*" -->
-
-
-	// Close the db connection (and free up any result data)
-	$forum_db->close();
 
 	exit($tpl_maint);
 }
