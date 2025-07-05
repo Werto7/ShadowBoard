@@ -38,7 +38,6 @@ if ($forum_user['g_read_board'] == '1' && $forum_config['o_quickjump'] == '1')
 ($hook = get_hook('ft_about_pre_copyright')) ? eval($hook) : null;
 
 ?>
-	<p id="copyright"><?php echo sprintf($lang_common['Powered by'], '<a href="https://punbb.informer.com/" target="_blank">PunBB</a>'.($forum_config['o_show_version'] == '1' ? ' '.$forum_config['o_cur_version'] : ''), '<a href="https://www.informer.com/" target="_blank">Informer Technologies, Inc</a>') ?></p>
 <?php
 
 ($hook = get_hook('ft_about_end')) ? eval($hook) : null;
@@ -122,12 +121,6 @@ $tpl_main = str_replace('<!-- forum_javascript -->', $forum_loader->render_js(),
 
 // Last call!
 ($hook = get_hook('ft_end')) ? eval($hook) : null;
-
-// End the transaction
-$forum_db->end_transaction();
-
-// Close the db connection (and free up any result data)
-$forum_db->close();
 
 // Spit out the page
 exit($tpl_main);

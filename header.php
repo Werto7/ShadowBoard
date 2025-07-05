@@ -2,9 +2,9 @@
 /**
  * Outputs the header used by most forum pages.
  *
- * @copyright (C) 2008-2012 PunBB, partially based on code (C) 2008-2009 FluxBB.org
+ * @copyright (C) 2024-2025 ShadowBoard, partially based on code (C) 2008-2012 punbb.informer.com
  * @license http://www.gnu.org/licenses/gpl.html GPL version 2 or higher
- * @package PunBB
+ * @package ShadowBoard
  */
 
 
@@ -73,6 +73,7 @@ $tpl_main = str_replace('<!-- forum_local -->', 'lang="'.$lang_common['lang_iden
 // START SUBST - <!-- forum_head -->
 
 // Is this a page that we want search index spiders to index?
+$forum_config['o_board_desc'] = trim($forum_config['o_board_desc'], "'");
 if (!defined('FORUM_ALLOW_INDEX'))
 	$forum_head['robots'] = '<meta name="ROBOTS" content="NOINDEX, FOLLOW" />';
 else
@@ -260,11 +261,7 @@ if ($forum_user['g_id'] == FORUM_ADMIN)
 			$alert_items['update_hotfix'] = '<p><strong>'.$lang_common['Updates'].'</strong> '.sprintf($lang_common['Updates hf'], forum_link($forum_url['admin_extensions_hotfixes'])).'</p>';
 	}
 
-	// Warn the admin that their version of the database is newer than the version supported by the code
 	// NOTE: Why is it done on any page, but shown in admin section only.
-	if ($forum_config['o_database_revision'] > FORUM_DB_REVISION)
-		$alert_items['newer_database'] = '<p><strong>'.$lang_common['Database mismatch'].'</strong> '.$lang_common['Database mismatch alert'].'</p>';
-
 	if (!empty($alert_items))
 		$admod_links['alert'] = '<li id="alert"><a href="'.forum_link($forum_url['admin_index']).'">'.$lang_common['New alerts'].'</a></li>';
 

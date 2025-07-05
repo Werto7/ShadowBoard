@@ -10,6 +10,11 @@
 
 if (!defined('FORUM_ROOT'))
 	define('FORUM_ROOT', './');
+require FORUM_ROOT.'include/dflayer.php';
+if (file_exists(__DIR__ . '/config.php')) {
+    include __DIR__ . '/config.php';
+    $forum_df = new DFLayer($df_name);
+}
 require FORUM_ROOT.'include/common.php';
 
 ($hook = get_hook('vt_start')) ? eval($hook) : null;
@@ -31,15 +36,22 @@ if ($id < 1 && $pid < 1)
 // If a post ID is specified we determine topic ID and page number so we can redirect to the correct message
 if ($pid)
 {
-	$query = array(
-		'SELECT'	=> 'p.topic_id, p.posted',
-		'FROM'		=> 'posts AS p',
-		'WHERE'		=> 'p.id='.$pid
-	);
+	$rows = $forum_df->fetch_all_from_file('posts'); // Nutzt deine vorhandene Funktion
+
+    $result = []; //Results list
+
+    foreach ($rows as $row) {
+    	if (isset($row['id']) && $row['id'] == $pid) {
+    	    $selected = [
+                'topic_id' => $row['topic_id'],
+                'posted' => $row['posted']
+            ];
+            $result[] = $selected;
+        }
+    }
 
 	($hook = get_hook('vt_qr_get_post_info')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-	$topic_info = $forum_db->fetch_assoc($result);
+	$topic_info = isset($result[0]) ? $result[0] : null;
 
 	if (!$topic_info)
 	{
@@ -49,15 +61,26 @@ if ($pid)
 	$id = $topic_info['topic_id'];
 
 	// Determine on what page the post is located (depending on $forum_user['disp_posts'])
-	$query = array(
-		'SELECT'	=> 'COUNT(p.id)',
-		'FROM'		=> 'posts AS p',
-		'WHERE'		=> 'p.topic_id='.$topic_info['topic_id'].' AND p.posted<'.$topic_info['posted']
-	);
+	$rows = $forum_df->fetch_all_from_file('posts');
+
+    $count = 0;
+
+    foreach ($rows as $row) {
+    	if (!isset($row['topic_id'], $row['posted'])) {
+    	    continue;
+        }
+
+        if (
+            $row['topic_id'] == $topic_info['topic_id'] &&
+            $row['posted'] < $topic_info['posted']
+        ) {
+        	$count++;
+        }
+    }
+
+    $num_posts = $count + 1;
 
 	($hook = get_hook('vt_qr_get_post_page')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-	$num_posts = $forum_db->result($result) + 1;
 
 	$_GET['p'] = ceil($num_posts / $forum_user['disp_posts']);
 }
@@ -116,34 +139,89 @@ else if ($action == 'last')
 
 
 // Fetch some info about the topic
-$query = array(
-	'SELECT'	=> 't.subject, t.first_post_id, t.closed, t.num_replies, t.sticky, f.id AS forum_id, f.forum_name, f.moderators, fp.post_replies',
-	'FROM'		=> 'topics AS t',
-	'JOINS'		=> array(
-		array(
-			'INNER JOIN'	=> 'forums AS f',
-			'ON'			=> 'f.id=t.forum_id'
-		),
-		array(
-			'LEFT JOIN'		=> 'forum_perms AS fp',
-			'ON'			=> '(fp.forum_id=f.id AND fp.group_id='.$forum_user['g_id'].')'
-		)
-	),
-	'WHERE'		=> '(fp.read_forum IS NULL OR fp.read_forum=1) AND t.id='.$id.' AND t.moved_to IS NULL'
-);
+$topics = $forum_df->fetch_all_from_file('topics');
+$forums = $forum_df->fetch_all_from_file('forums');
+$forum_perms = $forum_df->fetch_all_from_file('forum_perms');
+$subscriptions = (!$forum_user['is_guest'] && $forum_config['o_subscriptions'] == '1')
+    ? $forum_df->fetch_all_from_file('subscriptions')
+    : [];
 
-if (!$forum_user['is_guest'] && $forum_config['o_subscriptions'] == '1')
-{
-	$query['SELECT'] .= ', s.user_id AS is_subscribed';
-	$query['JOINS'][] = array(
-		'LEFT JOIN'	=> 'subscriptions AS s',
-		'ON'		=> '(t.id=s.topic_id AND s.user_id='.$forum_user['id'].')'
-	);
+$result = [];
+
+foreach ($topics as $t) {
+    if (
+        isset($t['id']) && $t['id'] == $id &&
+        (!isset($t['moved_to']) || $t['moved_to'] === null)
+    ) {
+        // INNER JOIN forums f ON f.id = t.forum_id
+        $forum = null;
+        foreach ($forums as $f) {
+            if (isset($f['id']) && $f['id'] == $t['forum_id']) {
+                $forum = $f;
+                break;
+            }
+        }
+
+        if (!$forum) {
+            continue; //INNER JOIN fails, so skip topic
+        }
+
+        $perm = null;
+        foreach ($forum_perms as $fp) {
+            if (
+                isset($fp['forum_id'], $fp['group_id']) &&
+                $fp['forum_id'] == $forum['id'] &&
+                $fp['group_id'] == $forum_user['g_id']
+            ) {
+                $perm = $fp;
+                break;
+            }
+        }
+
+        $read_forum_allowed = !isset($perm['read_forum']) || $perm['read_forum'] == 1;
+        if (!$read_forum_allowed) {
+            continue;
+        }
+
+        // Optional: LEFT JOIN subscriptions
+        $is_subscribed = 0;
+        if (!empty($subscriptions)) {
+            foreach ($subscriptions as $s) {
+                if (
+                    isset($s['topic_id'], $s['user_id']) &&
+                    $s['topic_id'] == $t['id'] &&
+                    $s['user_id'] == $forum_user['id']
+                ) {
+                    $is_subscribed = 1;
+                    break;
+                }
+            }
+        }
+
+        //Compile results
+        $row = [
+            'subject'        => $t['subject'],
+            'first_post_id'  => $t['first_post_id'],
+            'closed'         => $t['closed'] ?? '0',
+            'num_replies'    => $t['num_replies'] ?? '0',
+            'sticky'         => $t['sticky'] ?? '0',
+            'forum_id'       => $forum['id'],
+            'forum_name'     => $forum['forum_name'],
+            'moderators'     => $forum['moderators'] ?? '',
+            'post_replies'   => isset($perm['post_replies']) ? $perm['post_replies'] : null,
+        ];
+
+        if (!empty($subscriptions)) {
+            $row['is_subscribed'] = $is_subscribed;
+        }
+
+        $result[] = $row;
+    }
 }
 
 ($hook = get_hook('vt_qr_get_topic_info')) ? eval($hook) : null;
-$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-$cur_topic = $forum_db->fetch_assoc($result);
+$topic_info = !empty($result) ? $result[0] : null;
+$cur_topic = $topic_info;
 
 if (!$cur_topic)
 {
@@ -208,9 +286,6 @@ else
 
 // Setup main options
 $forum_page['main_title'] = $lang_topic['Topic options'];
-$forum_page['main_head_options'] = array(
-	'rss' => '<span class="feed first-item"><a class="feed" href="'.forum_link($forum_url['topic_rss'], $id).'">'.$lang_topic['RSS topic feed'].'</a></span>'
-);
 
 if (!$forum_user['is_guest'] && $forum_config['o_subscriptions'] == '1')
 {
@@ -279,52 +354,119 @@ if (!defined('FORUM_PARSER_LOADED'))
 $forum_page['item_count'] = 0;	// Keep track of post numbers
 
 // 1. Retrieve the posts ids
-$query = array(
-	'SELECT'	=> 'p.id',
-	'FROM'		=> 'posts AS p',
-	'WHERE'		=> 'p.topic_id='.$id,
-	'ORDER BY'	=> 'p.id',
-	'LIMIT'		=> $forum_page['start_from'].','.$forum_user['disp_posts']
-);
+//Load all posts
+$posts = $forum_df->fetch_all_from_file('posts');
+
+//Only posts with matching topic_id
+$filtered = [];
+foreach ($posts as $p) {
+	if (isset($p['topic_id']) && $p['topic_id'] == $id) {
+		$filtered[] = $p;
+	}
+}
+
+//Sort by p.id (ascending)
+usort($filtered, function ($a, $b) {
+	return $a['id'] <=> $b['id'];
+});
+
+//Apply limit
+$start = $forum_page['start_from'];
+$limit = $forum_user['disp_posts'];
+$limited = array_slice($filtered, $start, $limit);
+
+//Now extract only the column p.id
+$result = [];
+foreach ($limited as $post) {
+	$result[] = $post['id'];
+}
 
 ($hook = get_hook('vt_qr_get_posts_id')) ? eval($hook) : null;
-$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
 
 $posts_id = array();
-while ($row = $forum_db->fetch_assoc($result)) {
-	$posts_id[] = $row['id'];
+foreach ($result as $id) {
+	$posts_id[] = $id;
 }
 
 
 if (!empty($posts_id))
 {
 	// 2. Retrieve the posts (and their respective poster/online status) by known id`s
-	$query = array(
-		'SELECT'	=> 'u.email, u.title, u.url, u.location, u.signature, u.email_setting, u.num_posts, u.registered, u.admin_note, u.avatar, u.avatar_width, u.avatar_height, p.id, p.poster AS username, p.poster_id, p.poster_ip, p.poster_email, p.message, p.hide_smilies, p.posted, p.edited, p.edited_by, g.g_id, g.g_user_title, o.user_id AS is_online',
-		'FROM'		=> 'posts AS p',
-		'JOINS'		=> array(
-			array(
-				'INNER JOIN'	=> 'users AS u',
-				'ON'			=> 'u.id=p.poster_id'
-			),
-			array(
-				'INNER JOIN'	=> 'groups AS g',
-				'ON'			=> 'g.g_id=u.group_id'
-			),
-			array(
-				'LEFT JOIN'		=> 'online AS o',
-				'ON'			=> '(o.user_id=u.id AND o.user_id!=1 AND o.idle=0)'
-			),
-		),
-		'WHERE'		=> 'p.id IN ('.implode(',', $posts_id).')',
-		'ORDER BY'	=> 'p.id'
-	);
+	$posts = $forum_df->fetch_all_from_file('posts');
+	$users = $forum_df->fetch_all_from_file('users');
+	$groups = $forum_df->fetch_all_from_file('groups');
+	$online = $forum_df->fetch_all_from_file('online');
+
+    $users_by_id = [];
+    foreach ($users as $user) {
+    	$users_by_id[$user['id']] = $user;
+    }
+
+    $groups_by_id = [];
+    foreach ($groups as $group) {
+    	$groups_by_id[$group['g_id']] = $group;
+    }
+
+    $online_by_user_id = [];
+    foreach ($online as $entry) {
+    	if ($entry['user_id'] != 1 && $entry['idle'] == 0) {
+    	    $online_by_user_id[$entry['user_id']] = $entry;
+        }
+    }
+
+    $result = [];
+    
+    foreach ($posts as $post) {
+    	if (!in_array($post['id'], $posts_id)) {
+    	    continue;
+        }
+
+        $user = $users_by_id[$post['poster_id']] ?? null;
+        $group = $user ? ($groups_by_id[$user['group_id']] ?? null) : null;
+        $is_online = isset($online_by_user_id[$post['poster_id']]) ? $post['poster_id'] : null;
+
+        $row = [
+            'email' => $user['email'] ?? null,
+            'title' => $user['title'] ?? null,
+            'url' => $user['url'] ?? null,
+            'location' => $user['location'] ?? null,
+            'signature' => $user['signature'] ?? null,
+            'email_setting' => $user['email_setting'] ?? null,
+            'num_posts' => $user['num_posts'] ?? null,
+            'registered' => $user['registered'] ?? null,
+            'admin_note' => $user['admin_note'] ?? null,
+            'avatar' => $user['avatar'] ?? null,
+            'avatar_width' => $user['avatar_width'] ?? null,
+            'avatar_height' => $user['avatar_height'] ?? null,
+
+            'id' => $post['id'],
+            'username' => $post['poster'],
+            'poster_id' => $post['poster_id'],
+            'poster_ip' => $post['poster_ip'],
+            'poster_email' => $post['poster_email'] ?? '',
+            'message' => $post['message'],
+            'hide_smilies' => $post['hide_smilies'] ?? 0,
+            'posted' => $post['posted'],
+            'edited' => $post['edited'] ?? '',
+            'edited_by' => $post['edited_by'] ?? '',
+
+            'g_id' => $group['g_id'] ?? null,
+            'g_user_title' => $group['g_user_title'] ?? null,
+
+            'is_online' => $is_online,
+        ];
+
+        $result[] = $row;
+    }
+
+    usort($result, function ($a, $b) {
+    	return $a['id'] <=> $b['id'];
+    });
 
 	($hook = get_hook('vt_qr_get_posts')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
 
 	$user_data_cache = array();
-	while ($cur_post = $forum_db->fetch_assoc($result))
+	foreach ($result as $cur_post)
 	{
 		($hook = get_hook('vt_post_loop_start')) ? eval($hook) : null;
 

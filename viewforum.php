@@ -2,14 +2,19 @@
 /**
  * Lists the topics in the specified forum.
  *
- * @copyright (C) 2008-2012 PunBB, partially based on code (C) 2008-2009 FluxBB.org
+ * @copyright (C) 2024-2025 ShadowBoard, partially based on code (C) 2008-2012 punbb.informer.com
  * @license http://www.gnu.org/licenses/gpl.html GPL version 2 or higher
- * @package PunBB
+ * @package ShadowBoard
  */
 
 
 if (!defined('FORUM_ROOT'))
 	define('FORUM_ROOT', './');
+require FORUM_ROOT.'include/dflayer.php';
+if (file_exists(__DIR__ . '/config.php')) {
+    include __DIR__ . '/config.php';
+    $forum_df = new DFLayer($df_name);
+}
 require FORUM_ROOT.'include/common.php';
 
 ($hook = get_hook('vf_start')) ? eval($hook) : null;
@@ -27,30 +32,67 @@ if ($id < 1)
 
 
 // Fetch some info about the forum
-$query = array(
-	'SELECT'	=> 'f.forum_name, f.redirect_url, f.moderators, f.num_topics, f.sort_by, fp.post_topics',
-	'FROM'		=> 'forums AS f',
-	'JOINS'		=> array(
-		array(
-			'LEFT JOIN'		=> 'forum_perms AS fp',
-			'ON'			=> '(fp.forum_id=f.id AND fp.group_id='.$forum_user['g_id'].')'
-		)
-	),
-	'WHERE'		=> '(fp.read_forum IS NULL OR fp.read_forum=1) AND f.id='.$id
-);
+$forums = $forum_df->fetch_all_from_file('forums');
+$forum_perms = $forum_df->fetch_all_from_file('forum_perms');
 
-if (!$forum_user['is_guest'] && $forum_config['o_subscriptions'] == '1')
-{
-	$query['SELECT'] .= ', fs.user_id AS is_subscribed';
-	$query['JOINS'][] = array(
-		'LEFT JOIN'	=> 'forum_subscriptions AS fs',
-		'ON'		=> '(f.id=fs.forum_id AND fs.user_id='.$forum_user['id'].')'
-	);
+$subscriptions = [];
+if (!$forum_user['is_guest'] && $forum_config['o_subscriptions'] === '1') {
+    $subscriptions = $forum_df->fetch_all_from_file('forum_subscriptions');
 }
 
+//Prepare result array
+$result = [];
+
+//Search all forums
+foreach ($forums as $f) {
+    // WHERE f.id = $id
+    if ($f['id'] != $id) {
+        continue;
+    }
+
+    // LEFT JOIN forum_perms AS fp ON (fp.forum_id = f.id AND fp.group_id = $forum_user['g_id'])
+    $fp = null;
+    foreach ($forum_perms as $perm) {
+        if ($perm['forum_id'] == $f['id'] && $perm['group_id'] == $forum_user['g_id']) {
+            $fp = $perm;
+            break;
+        }
+    }
+
+    // WHERE (fp.read_forum IS NULL OR fp.read_forum = 1)
+    if (isset($fp['read_forum']) && $fp['read_forum'] != 1) {
+        continue;
+    }
+
+    //Basic data from forums + forum_perms
+    $row = [
+        'forum_name'    => $f['forum_name'],
+        'redirect_url'  => $f['redirect_url'] ?? '',
+        'moderators'    => $f['moderators'] ?? '',
+        'num_topics'    => $f['num_topics'],
+        'sort_by'       => $f['sort_by'] ?? '2',
+        'post_topics'   => isset($fp['post_topics']) ? $fp['post_topics'] : null
+    ];
+
+    //Optional: LEFT JOIN forum_subscriptions AS fs
+    if (!empty($subscriptions)) {
+        $is_subscribed = null;
+        foreach ($subscriptions as $sub) {
+            if ($sub['forum_id'] == $f['id'] && $sub['user_id'] == $forum_user['id']) {
+                $is_subscribed = $sub['user_id'];
+                break;
+            }
+        }
+        $row['is_subscribed'] = $is_subscribed;
+    }
+
+    $result[] = $row;
+}
+
+$clean_result = $forum_df->trim_quotes_recursive($result);
+
 ($hook = get_hook('vf_qr_get_forum_info')) ? eval($hook) : null;
-$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
-$cur_forum = $forum_db->fetch_assoc($result);
+$cur_forum = reset($clean_result);
 
 if (!$cur_forum)
 	message($lang_common['Bad request']);
@@ -79,10 +121,13 @@ if (!$forum_user['is_guest'])
 	$tracked_topics = get_tracked_topics();
 
 // Determine the topic offset (based on $_GET['p'])
-$forum_page['num_pages'] = ceil($cur_forum['num_topics'] / $forum_user['disp_topics']);
+$forum_page['num_pages'] = ceil((int)$cur_forum['num_topics'] / max(1, (int)$forum_user['disp_topics']));
 $forum_page['page'] = (!isset($_GET['p']) || !is_numeric($_GET['p']) || $_GET['p'] <= 1 || $_GET['p'] > $forum_page['num_pages']) ? 1 : $_GET['p'];
-$forum_page['start_from'] = $forum_user['disp_topics'] * ($forum_page['page'] - 1);
-$forum_page['finish_at'] = min(($forum_page['start_from'] + $forum_user['disp_topics']), ($cur_forum['num_topics']));
+$forum_page['start_from'] = (int)$forum_user['disp_topics'] * ($forum_page['page'] - 1);
+$forum_page['finish_at'] = min(
+    $forum_page['start_from'] + (int)$forum_user['disp_topics'],
+    (int)$cur_forum['num_topics']
+);
 $forum_page['items_info'] = generate_items_info($lang_forum['Topics'], ($forum_page['start_from'] + 1), $cur_forum['num_topics']);
 
 ($hook = get_hook('vf_modify_page_details')) ? eval($hook) : null;
@@ -101,19 +146,42 @@ if ($forum_page['page'] > 1)
 
 
 // 1. Retrieve the topics id
-$query = array(
-	'SELECT'	=> 't.id',
-	'FROM'		=> 'topics AS t',
-	'WHERE'		=> 't.forum_id='.$id,
-	'ORDER BY'	=> 't.sticky DESC, '.(($cur_forum['sort_by'] == '1') ? 't.posted' : 't.last_post').' DESC',
-	'LIMIT'		=> $forum_page['start_from'].', '.$forum_user['disp_topics']
-);
+//1. Load all topics from file
+$all_topics = $forum_df->fetch_all_from_file('topics');
+
+// 2. Filter: WHERE t.forum_id = $id
+$filtered = array_filter($all_topics, function ($t) use ($id) {
+    return isset($t['forum_id']) && $t['forum_id'] == $id;
+});
+
+//3. Sort by sticky DESC, then posted or last_post DESC
+$sort_key = ($cur_forum['sort_by'] === '1') ? 'posted' : 'last_post';
+
+usort($filtered, function ($a, $b) use ($sort_key) {
+    //First by sticky DESC
+    if ((int)$a['sticky'] !== (int)$b['sticky']) {
+        return (int)$b['sticky'] - (int)$a['sticky'];
+    }
+    //Then by sort_key DESC
+    return (int)$b[$sort_key] - (int)$a[$sort_key];
+});
+
+//4. LIMIT: Offset + count
+$offset = (int)$forum_page['start_from'];
+$limit  = (int)$forum_user['disp_topics'];
+
+$limited = array_slice($filtered, $offset, $limit);
+
+//5. SELECT: Keep only the ID
+$result = array_map(function ($t) {
+    return ['id' => $t['id']];
+}, $limited);
 
 ($hook = get_hook('vt_qr_get_topics_id')) ? eval($hook) : null;
-$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
 
 $topics_id = $topics = array();
-while ($row = $forum_db->fetch_assoc($result)) {
+$clean_result = $forum_df->trim_quotes_recursive($result);
+foreach ($clean_result as $row) {
 	$topics_id[] = $row['id'];
 }
 
@@ -125,35 +193,66 @@ if (!empty($topics_id))
 	 * EXT DEVELOPERS
 	 * If you modify SELECT of this query - than add same columns in next query (has posted) in GROUP BY
 	*/
-	$query = array(
-		'SELECT'	=> 't.id, t.poster, t.subject, t.posted, t.first_post_id, t.last_post, t.last_post_id, t.last_poster, t.num_views, t.num_replies, t.closed, t.sticky, t.moved_to',
-		'FROM'		=> 'topics AS t',
-		'WHERE'		=> 't.id IN ('.implode(',', $topics_id).')',
-		'ORDER BY'	=> 't.sticky DESC, '.(($cur_forum['sort_by'] == '1') ? 't.posted' : 't.last_post').' DESC',
-	);
+	//1. Load all topics (t)
+    $all_topics = $forum_df->fetch_all_from_file('topics');
 
-	// With "has posted" indication
-	if (!$forum_user['is_guest'] && $forum_config['o_show_dot'] == '1')
-	{
-		$query['SELECT'] .= ', p.poster_id AS has_posted';
-		$query['JOINS'][]	= array(
-			'LEFT JOIN'		=> 'posts AS p',
-			'ON'			=> '(p.poster_id='.$forum_user['id'].' AND p.topic_id=t.id)'
-		);
+    $topics = array_filter($all_topics, function ($t) use ($topics_id) {
+    	return in_array($t['id'], $topics_id);
+    });
 
-		// Must have same columns as in prev SELECT
-		$query['GROUP BY'] = 't.id, t.poster, t.subject, t.posted, t.first_post_id, t.last_post, t.last_post_id, t.last_poster, t.num_views, t.num_replies, t.closed, t.sticky, t.moved_to, p.poster_id';
+    if (!$forum_user['is_guest'] && $forum_config['o_show_dot'] == '1') {
+    	$all_posts = $forum_df->fetch_all_from_file('posts');
+        $posted_topic_ids = [];
 
-		($hook = get_hook('vf_qr_get_has_posted')) ? eval($hook) : null;
-	}
+        foreach ($all_posts as $p) {
+        	if (isset($p['poster_id'], $p['topic_id']) && $p['poster_id'] == $forum_user['id']) {
+        	    $posted_topic_ids[$p['topic_id']] = true;
+            }
+        }
+
+        foreach ($topics as &$t) {
+        	$t['has_posted'] = isset($posted_topic_ids[$t['id']]) ? $forum_user['id'] : null;
+        }
+        unset($t);
+        ($hook = get_hook('vf_qr_get_has_posted')) ? eval($hook) : null;
+    }
+
+    $sort_key = ($cur_forum['sort_by'] == '1') ? 'posted' : 'last_post';
+
+    usort($topics, function ($a, $b) use ($sort_key) {
+    	if ((int)$a['sticky'] !== (int)$b['sticky']) {
+    	    return (int)$b['sticky'] - (int)$a['sticky'];
+        }
+        return (int)$b[$sort_key] - (int)$a[$sort_key];
+    });
+
+    $final = array_map(function ($t) use ($forum_user, $forum_config) {
+    	$result = [
+            'id'             => $t['id'],
+            'poster'         => $t['poster'],
+            'subject'        => $t['subject'],
+            'posted'         => $t['posted'],
+            'first_post_id'  => $t['first_post_id'],
+            'last_post'      => $t['last_post'],
+            'last_post_id'   => $t['last_post_id'],
+            'last_poster'    => $t['last_poster'],
+            'num_views'      => $t['num_views'] ?? '0',
+            'num_replies'    => $t['num_replies'] ?? '0',
+            'closed'         => $t['closed'] ?? '0',
+            'sticky'         => $t['sticky']?? '0',
+            'moved_to'       => $t['moved_to'] ?? null,
+        ];
+
+        if (!$forum_user['is_guest'] && $forum_config['o_show_dot'] == '1') {
+        	$result['has_posted'] = $t['has_posted'] ?? null;
+        }
+
+        return $result;
+    }, $topics);
 
 	($hook = get_hook('vf_qr_get_topics')) ? eval($hook) : null;
-	$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
 
-	while ($cur_topic = $forum_db->fetch_assoc($result))
-	{
-		$topics[] = $cur_topic;
-	}
+	$topics = $final;
 }
 
 // Generate paging/posting links
@@ -168,9 +267,6 @@ else
 
 // Setup main options
 $forum_page['main_head_options'] = $forum_page['main_foot_options'] = array();
-
-if (!empty($topics))
-	$forum_page['main_head_options']['feed'] = '<span class="feed first-item"><a class="feed" href="'.forum_link($forum_url['forum_rss'], $id).'">'.$lang_forum['RSS forum feed'].'</a></span>';
 
 if (!$forum_user['is_guest'] && $forum_config['o_subscriptions'] == '1')
 {

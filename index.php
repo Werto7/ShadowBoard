@@ -2,18 +2,17 @@
 /**
  * Displays a list of the categories/forums that the current user can see, along with some statistics.
  *
- * @copyright (C) 2008-2012 PunBB, partially based on code (C) 2008-2009 FluxBB.org
+ * @copyright (C) 2024-2025 ShadowBoard, partially based on code (C) 2008-2012 punbb.informer.com
  * @license http://www.gnu.org/licenses/gpl.html GPL version 2 or higher
- * @package PunBB
+ * @package ShadowBoard
  */
-
-
 if (!defined('FORUM_ROOT'))
 	define('FORUM_ROOT', './');
 require FORUM_ROOT.'include/dflayer.php';
-include 'config.php';
-
-$forum_df = new DFLayer($df_name);
+if (file_exists(__DIR__ . '/config.php')) {
+    include __DIR__ . '/config.php';
+    $forum_df = new DFLayer($df_name);
+} 
 
 require FORUM_ROOT.'include/common.php';
 
@@ -69,29 +68,78 @@ ob_start();
 ($hook = get_hook('in_main_output_start')) ? eval($hook) : null;
 
 // Print the categories and forums
-$query = array(
-	'SELECT'	=> 'c.id AS cid, c.cat_name, f.id AS fid, f.forum_name, f.forum_desc, f.redirect_url, f.moderators, f.num_topics, f.num_posts, f.last_post, f.last_post_id, f.last_poster',
-	'FROM'		=> 'categories AS c',
-	'JOINS'		=> array(
-		array(
-			'INNER JOIN'	=> 'forums AS f',
-			'ON'			=> 'c.id=f.cat_id'
-		),
-		array(
-			'LEFT JOIN'		=> 'forum_perms AS fp',
-			'ON'			=> '(fp.forum_id=f.id AND fp.group_id='.$forum_user['g_id'].')'
-		)
-	),
-	'WHERE'		=> 'fp.read_forum IS NULL OR fp.read_forum=1',
-	'ORDER BY'	=> 'c.disp_position, c.id, f.disp_position'
-);
+$group_id = $forum_user['g_id'];
+
+//1. Load all data from files
+$categories = $forum_df->fetch_all_from_file('categories');
+$forums     = $forum_df->fetch_all_from_file('forums');
+$perms      = $forum_df->fetch_all_from_file('forum_perms');
+
+//2. Build a lookup for forum_perms by [forum_id][group_id]
+$perm_lookup = [];
+foreach ($perms as $p) {
+    $perm_lookup[$p['forum_id']][$p['group_id']] = $p;
+}
+
+//3. Generate result list
+$results = [];
+
+foreach ($categories as $c) {
+    foreach ($forums as $f) {
+        // INNER JOIN: c.id = f.cat_id
+        if (!isset($c['id'])) {
+            continue; //invalid category entry
+        }
+        if ($f['cat_id'] != $c['id']) {
+            continue;
+        }
+
+        //LEFT JOIN: fp based on forum_id and group_id
+        $fp = $perm_lookup[$f['id']][$group_id] ?? null;
+
+        // WHERE: fp.read_forum IS NULL OR fp.read_forum == 1
+        if ($fp !== null && isset($fp['read_forum']) && $fp['read_forum'] != 1) {
+            continue;
+        }
+
+        //Transfer data to result
+        $results[] = [
+            'cid'            => $c['id'],
+            'cat_name'       => $c['cat_name'],
+            'fid'            => $f['id'],
+            'forum_name'     => $f['forum_name'],
+            'forum_desc'     => $f['forum_desc'],
+            'redirect_url'   => $f['redirect_url'] ?? null,
+            'moderators'     => $f['moderators'] ?? [],
+            'num_topics'     => $f['num_topics'],
+            'num_posts'      => $f['num_posts'],
+            'last_post'      => $f['last_post'],
+            'last_post_id'   => $f['last_post_id'],
+            'last_poster'    => $f['last_poster'],
+            'c_disp_position'=> $c['disp_position'] ?? 0,
+            'f_disp_position'=> $f['disp_position'] ?? 0
+        ];
+    }
+}
+
+//4. Sort by c.disp_position, c.id, f.disp_position
+usort($results, function ($a, $b) {
+    return [$a['c_disp_position'], $a['cid'], $a['f_disp_position']]
+         <=> [$b['c_disp_position'], $b['cid'], $b['f_disp_position']];
+});
 
 ($hook = get_hook('in_qr_get_cats_and_forums')) ? eval($hook) : null;
-$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
+try {
+    $result = $results;
+} catch (Exception $e) {
+    error($e->getMessage(), __FILE__, __LINE__);
+}
 
 $forum_page['cur_category'] = $forum_page['cat_count'] = $forum_page['item_count'] = 0;
 
-while ($cur_forum = $forum_db->fetch_assoc($result))
+$clean_result = $forum_df->trim_quotes_recursive($result);
+
+foreach ($clean_result as $cur_forum)
 {
 	($hook = get_hook('in_forum_loop_start')) ? eval($hook) : null;
 
@@ -114,6 +162,8 @@ while ($cur_forum = $forum_db->fetch_assoc($result))
 		($hook = get_hook('in_forum_pre_cat_head')) ? eval($hook) : null;
 
 		$forum_page['cur_category'] = $cur_forum['cid'];
+		
+		$cur_forum['cat_name'] = trim($cur_forum['cat_name'], "'");
 
 ?>	<div class="main-head">
 		<h2 class="hn"><span><?php echo forum_htmlencode($cur_forum['cat_name']) ?></span></h2>
@@ -132,7 +182,7 @@ while ($cur_forum = $forum_db->fetch_assoc($result))
 	// Is this a redirect forum?
 	if ($cur_forum['redirect_url'] != '')
 	{
-		$forum_page['item_body']['subject']['title'] = '<h3 class="hn"><a class="external" href="'.forum_htmlencode($cur_forum['redirect_url']).'" title="'.sprintf($lang_index['Link to'], forum_htmlencode($cur_forum['redirect_url'])).'"><span>'.forum_htmlencode($cur_forum['forum_name']).'</span></a></h3>';
+        $forum_page['item_body']['subject']['title'] = '<h3 class="hn"><a class="external" href="'.forum_htmlencode($cur_forum['redirect_url']).'" title="'.sprintf($lang_index['Link to'], forum_htmlencode($cur_forum['redirect_url'])).'"><span>'.forum_htmlencode($cur_forum['forum_name']).'</span></a></h3>';
 		$forum_page['item_status']['redirect'] = 'redirect';
 
 		if ($cur_forum['forum_desc'] != '')
