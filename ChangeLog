@@ -9,3 +9,9 @@ ShadowBoard 0.31
 ====================
 
  * The forum software installation does not work, but data is now saved in .json instead of .txt.
+ ---------------------------------------------------------------------------------------------------------------------------------------------------------
+ ShadowBoard 0.60
+ 2025-07-05 16:00
+ ====================
+ 
+ * Installation of the forum software works again
