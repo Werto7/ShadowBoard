@@ -2487,3 +2487,40 @@ button[disabled]:focus {
     color: #000;
     text-shadow: none
 }
+/* === Mobile adaptations for small screens (not working at the moment) === */
+@media (max-width: 768px) {
+    .first-item {
+        float: none !important;
+        display: block !important;
+        width: 100% !important;
+        text-align: left !important;
+        margin: 5px 0 0 0 !important;
+    }
+
+    #welcome {
+    float: none !important;
+    clear: both;
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+    #visit-recent,
+  #visit-unanswered {
+    display: block !important;
+    float: none !important;
+    clear: both !important;
+    text-align: left !important;
+    width: 100%;
+    margin: 5px 0 0 0;
+  }
+
+    p.options {
+    float: none !important;
+    display: block !important;
+    width: 100%;
+    text-align: left !important;
+    margin: 0;
+    clear: both;
+  }
+}
