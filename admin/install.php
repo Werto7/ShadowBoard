@@ -58,7 +58,10 @@ function generate_config_file()
         .'$cookie_domain = '."'';\n"
         .'$cookie_path = '."'/';\n"
         .'$cookie_secure = 0;'."\n\n"
-        .'define(\'FORUM\', 1);';
+        .'if (!defined(\'FORUM\')) {'."\n"
+        .'    define(\'FORUM\', 1);'."\n"
+        .'}';
+
 
 
 	// Add forum options
@@ -317,7 +320,7 @@ else
 		return $str;
 	}
 
-    $df_name = '../../data';
+    $df_name = __DIR__ . '/../../data';
     if (!is_dir($df_name)) {
         if (!mkdir($df_name, 0777, true)) {
             die('Fehler: Der Ordner "' . $df_name . '" konnte nicht erstellt werden.');
@@ -369,17 +372,20 @@ else
     $forum_df = new DFLayer($df_name);
 
 	// Make sure ShadowBoard isn't already installed
-	if (file_exists($df_name.'/users.txt')) //Check if the file exists
-    {
-    $users_data = file($df_name.'/users.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES); //Read file, save each line as user
-    
-    foreach ($users_data as $user) {
-        $user_info = explode(',', $user);
-        if (intval($user_info[count($user_info)-1]) == 1) { //Check if user with ID 1 exists
-            error(sprintf($lang_install['ShadowBoard already installed'], $df_name));
+    if (file_exists($df_name.'/users.json')) {
+        $users_json = file_get_contents($df_name.'/users.json'); // Ganze JSON-Datei einlesen
+        $users_data = json_decode($users_json, true); // Als assoziatives Array dekodieren
+
+        if (!is_array($users_data)) {
+            error('Benutzerdatei konnte nicht gelesen werden oder ist fehlerhaft.', __FILE__, __LINE__);
+        }
+
+        foreach ($users_data as $user) {
+            if (isset($user['id']) && intval($user['id']) === 1) { // Prüfen, ob Benutzer mit ID 1 existiert
+                error(sprintf($lang_install['ShadowBoard already installed'], $df_name));
+            }
         }
     }
-}
 
 	// Create all files
     if (!file_exists($df_name.'/bans.json')) {
@@ -469,14 +475,13 @@ else
 	$query = array(
 		'INSERT'	=> 'g_title, g_user_title, g_moderator, g_mod_edit_users, g_mod_rename_users, g_mod_change_passwords, g_mod_ban_users, g_read_board, g_view_users, g_post_replies, g_post_topics, g_edit_posts, g_delete_posts, g_delete_topics, g_set_title, g_search, g_search_users, g_send_email, g_post_flood, g_search_flood, g_email_flood, g_id',
 		'INTO'		=> 'groups',
-		'VALUES'	=> '\'Administrators\', \'Administrator\', 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1'
+		'VALUES'	=> '\'Administrators\', Administrator, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1'
 	);
 	
 	$columns = array_map('trim', explode(',', $query['INSERT']));
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
@@ -493,7 +498,6 @@ else
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
@@ -510,7 +514,6 @@ else
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
@@ -520,14 +523,13 @@ else
 	$query = array(
 		'INSERT'	=> 'g_title, g_user_title, g_moderator, g_mod_edit_users, g_mod_rename_users, g_mod_change_passwords, g_mod_ban_users, g_read_board, g_view_users, g_post_replies, g_post_topics, g_edit_posts, g_delete_posts, g_delete_topics, g_set_title, g_search, g_search_users, g_send_email, g_post_flood, g_search_flood, g_email_flood, g_id',
 		'INTO'		=> 'groups',
-		'VALUES'	=> '\'Moderators\', \'Moderator\', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 4'
+		'VALUES'	=> '\'Moderators\', Moderator, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 4'
 	);
 
 	$columns = array_map('trim', explode(',', $query['INSERT']));
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
@@ -545,7 +547,6 @@ else
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
@@ -555,7 +556,7 @@ else
 	$salt = random_key(12);
 	
 	$query = array(
-	    'INSERT'	=> 'group_id, username, password, language, num_posts, last_post, registered, last_visit, salt',
+	    'INSERT'	=> 'group_id, username, password, language, num_posts, last_post, registered, last_visit, salt, id',
 	    'INTO'		=> 'users',
 	    'VALUES'	=> array(
 		    1,
@@ -566,7 +567,8 @@ else
 		    $now,
 		    $now,
 		    $now,
-		    $forum_df->escape($salt)
+		    $forum_df->escape($salt),
+		    2
 	    )
     );
 
@@ -591,8 +593,8 @@ else
 	$config = array(
 		'o_cur_version'				=> "'".FORUM_VERSION."'",
 		'o_database_revision'		=> "'".FORUM_DB_REVISION."'",
-		'o_board_title'				=> "'".$forum_df->escape($board_title)."'",
-		'o_board_desc'				=> "'".$forum_df->escape($board_descrip)."'",
+		'o_board_title'				=> $forum_df->escape($board_title),
+		'o_board_desc'				=> $forum_df->escape($board_descrip),
 		'o_default_timezone'		=> "'0'",
 		'o_time_format'				=> "'H:i:s'",
 		'o_date_format'				=> "'Y-m-d'",
@@ -612,8 +614,8 @@ else
 		'o_default_style'			=> "'Oxygen'",
 		'o_default_user_group'		=> "'3'",
 		'o_topic_review'			=> "'15'",
-		'o_disp_topics_default'		=> "'30'",
-		'o_disp_posts_default'		=> "'25'",
+		'o_disp_topics_default'		=> "30",
+		'o_disp_posts_default'		=> "25",
 		'o_indent_num_spaces'		=> "'4'",
 		'o_quote_depth'				=> "'3'",
 		'o_quickpost'				=> "'1'",
@@ -673,44 +675,47 @@ else
     }
 
 	// Insert some other default data
+	$id = $forum_df->get_new_uid('categories');
 	$query = array(
-		'INSERT'	=> 'cat_name, disp_position',
+		'INSERT'	=> 'id, cat_name, disp_position',
 		'INTO'		=> 'categories',
-		'VALUES'	=> '\''.$lang_install['Default category name'].'\', 1'
+		'VALUES'	=> (int) $id.',\''.$lang_install['Default category name'].'\', 1'
 	);
 
 	$columns = array_map('trim', explode(',', $query['INSERT']));
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
         error($e->getMessage(), __FILE__, __LINE__);
     }
 
-	$query = array(
-		'INSERT'	=> 'forum_name, forum_desc, num_topics, num_posts, last_post, last_post_id, last_poster, disp_position, cat_id',
-		'INTO'		=> 'forums',
-		'VALUES'	=> '\''.$lang_install['Default forum name'].'\', \''.$lang_install['Default forum descrip'].'\', 1, 1, '.$now.', 1, \''.$forum_df->escape($username).'\', 1, '.$forum_df->get_new_uid().''
-	);
+	$forum_id = $forum_df->get_new_uid('forums');
+
+    $query = array(
+	    'INSERT' => 'id, forum_name, forum_desc, num_topics, num_posts, last_post, last_post_id, last_poster, disp_position, cat_id',
+	    'INTO'   => 'forums',
+	    'VALUES' => (int) $forum_id.', '.$lang_install['Default forum name'].', '.$lang_install['Default forum descrip'].', 1, 1, '.$now.', 1, \''.$forum_df->escape($username).'\', 1, 1'
+    );
 
 	$columns = array_map('trim', explode(',', $query['INSERT']));
     $values  = array_map('trim', explode(',', $query['VALUES']));
     $data = array_combine($columns, $values);
 
-    // Jetzt speichern
     try {
         $forum_df->write_to_file($data, $query['INTO']);
     } catch (Exception $e) {
         error($e->getMessage(), __FILE__, __LINE__);
     }
 
-	$query = array(
-		'INSERT'	=> 'poster, subject, posted, first_post_id, last_post, last_post_id, last_poster, forum_id',
+	$topic_id = $forum_df->get_new_uid('topics');
+
+    $query = array(
+		'INSERT'	=> 'id, poster, subject, posted, first_post_id, last_post, last_post_id, last_poster, forum_id',
 		'INTO'		=> 'topics',
-		'VALUES'	=> '\''.$forum_df->escape($username).'\', \''.$lang_install['Default topic subject'].'\', '.$now.', 1, '.$now.', 1, \''.$forum_df->escape($username).'\', '.$forum_df->get_new_uid().''
+		'VALUES'	=> (int) $topic_id.','.$forum_df->escape($username).', '.$lang_install['Default topic subject'].', '.$now.', 1, '.$now.', 1, '.$forum_df->escape($username).', '.$forum_df->get_new_uid().''
 	);
 
 	$columns = array_map('trim', explode(',', $query['INSERT']));
@@ -728,7 +733,7 @@ else
         'INTO'   => 'posts',
         'VALUES' => array(
             $forum_df->escape($username),
-            $new_uid,
+            2,
             '127.0.0.1',
             $lang_install['Default post contents'],
             $now,
@@ -737,10 +742,10 @@ else
         )
     );
 
-    // In Spalten umwandeln
+    //Convert to columns
     $columns = array_map('trim', explode(',', $query['INSERT']));
 
-    // Jetzt kombinieren (Spaltenname => Wert)
+    //Combine now (column name => value)
     $data = array_combine($columns, $query['VALUES']);
 
 	try {
@@ -910,9 +915,6 @@ else
 			<p id="brd-desc"><?php printf($lang_install['Success description'], FORUM_VERSION) ?></p>
 		</div>
 		<div id="brd-main" class="main basic">
-			<div class="main-head">
-				<h1 class="hn"><span><?php echo $lang_install['Final instructions'] ?></span></h1>
-			</div>
 			<div class="main-content main-frm">
 <?php if (!empty($alerts)): ?>
 				<div class="ct-box error-box">
