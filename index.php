@@ -168,9 +168,7 @@ foreach ($clean_result as $cur_forum)
 ?>	<div class="main-head">
 		<h2 class="hn"><span><?php echo forum_htmlencode($cur_forum['cat_name']) ?></span></h2>
 	</div>
-	<div class="main-subhead">
-		<p class="item-summary"><span><?php printf($lang_index['Category subtitle'], implode(' ', $forum_page['item_header']['subject']), implode(', ', $forum_page['item_header']['info'])) ?></span></p>
-	</div>
+	
 	<div id="category<?php echo $forum_page['cat_count'] ?>" class="main-content main-category">
 <?php
 
@@ -205,7 +203,7 @@ foreach ($clean_result as $cur_forum)
 	else
 	{
 		// Setup the title and link to the forum
-		$forum_page['item_title']['title'] = '<a href="'.forum_link($forum_url['forum'], array($cur_forum['fid'], sef_friendly($cur_forum['forum_name']))).'"><span>'.forum_htmlencode($cur_forum['forum_name']).'</span></a>';
+		$forum_page['item_title']['title'] = '<a href="'.forum_link($forum_url['forum'], array($cur_forum['fid'], sef_friendly($cur_forum['forum_name']))).'"><span style="font-size: 1.5em;">'.forum_htmlencode($cur_forum['forum_name']).'</span></a>';
 
 		// Are there new posts since our last visit?
 		if (!$forum_user['is_guest'] && $cur_forum['last_post'] > $forum_user['last_visit'] && (empty($tracked_topics['forums'][$cur_forum['fid']]) || $cur_forum['last_post'] > $tracked_topics['forums'][$cur_forum['fid']]))
@@ -268,15 +266,36 @@ foreach ($clean_result as $cur_forum)
 
 	($hook = get_hook('in_row_pre_display')) ? eval($hook) : null;
 
-?>		<div id="forum<?php echo $cur_forum['fid'] ?>" class="main-item<?php echo $forum_page['item_style'] ?>">
-			<span class="icon <?php echo implode(' ', $forum_page['item_status']) ?>"><!-- --></span>
-			<div class="item-subject">
-				<?php echo implode("\n\t\t\t\t", $forum_page['item_body']['subject'])."\n" ?>
-			</div>
-			<ul class="item-info">
-				<?php echo implode("\n\t\t\t\t", $forum_page['item_body']['info'])."\n" ?>
-			</ul>
-		</div>
+?>		<div id="forum<?php echo $cur_forum['fid'] ?>"
+     class="main-item<?php echo $forum_page['item_style'] ?>">
+    <div class="custom-forum-summary">
+        <!-- 1. Forum name -->
+        <p class="forum-name">
+            <?php echo $forum_page['item_title']['title'] ?>
+        </p>
+
+        <!-- 2. Description in italics -->
+        <?php if (!empty($cur_forum['forum_desc'])): ?>
+            <p class="forum-desc"><em>
+                <?php echo forum_htmlencode($cur_forum['forum_desc']) ?>
+            </em></p>
+        <?php endif ?>
+
+        <!-- 3. Number of topics and posts -->
+        <div class="forum-stats">
+            <div>Themen: <?php echo forum_number_format($cur_forum['num_topics']) ?></div>
+            <div>Beiträge: <?php echo forum_number_format($cur_forum['num_posts']) ?></div>
+        </div>
+
+        <!-- 4. Last post -->
+        <?php if (!empty($cur_forum['last_post'])): ?>
+            <p class="forum-last-post">
+                Letzter Beitrag:
+                <?php echo '<strong><a href="'.forum_link($forum_url['post'], $cur_forum['last_post_id']).'">'.format_time($cur_forum['last_post']).'</a></strong> '.str_replace('%s', '<strong><a href="profile.php?id='.$forum_df->getUserByID(forum_htmlencode($cur_forum['last_poster'])).'">'.forum_htmlencode($cur_forum['last_poster']).'</a></strong>', $lang_index['Last poster']) ?>
+            </p>
+        <?php endif ?>
+    </div>
+</div>
 <?php
 
 }
@@ -328,10 +347,10 @@ if (!defined('FORUM_STATS_LOADED') || $forum_stats['cached'] < (time() - 1800))
 	require FORUM_CACHE_DIR.'cache_stats.php';
 }
 
-$stats_list['no_of_users'] = '<li class="st-users"><span>'.sprintf($lang_index['No of users'], '<strong>'.forum_number_format($forum_stats['total_users']).'</strong>').'</span></li>';
-$stats_list['newest_user'] = '<li class="st-users"><span>'.sprintf($lang_index['Newest user'], '<strong>'.($forum_user['g_view_users'] == '1' ? '<a href="'.forum_link($forum_url['user'], $forum_stats['last_user']['id']).'">'.forum_htmlencode($forum_stats['last_user']['username']).'</a>' : forum_htmlencode($forum_stats['last_user']['username'])).'</strong>').'</span></li>';
-$stats_list['no_of_topics'] = '<li class="st-activity"><span>'.sprintf($lang_index['No of topics'], '<strong>'.forum_number_format($forum_stats['total_topics']).'</strong>').'</span></li>';
-$stats_list['no_of_posts'] = '<li class="st-activity"><span>'.sprintf($lang_index['No of posts'], '<strong>'.forum_number_format($forum_stats['total_posts']).'</strong>').'</span></li>';
+$stats_list['no_of_users'] = '<li style="display:block; text-align:left; margin-bottom:2px; white-space:nowrap;"><span>'.sprintf($lang_index['No of users'], '<strong>'.forum_number_format($forum_stats['total_users']).'</strong>').'</span></li>';
+$stats_list['newest_user'] = '<li style="display:block; text-align:left; margin-bottom:2px; white-space:nowrap;"><span>'.sprintf($lang_index['Newest user'], '<strong>'.($forum_user['g_view_users'] == '1' ? '<a href="'.forum_link($forum_url['user'], $forum_stats['last_user']['id']).'">'.forum_htmlencode($forum_stats['last_user']['username']).'</a>' : forum_htmlencode($forum_stats['last_user']['username'])).'</strong>').'</span></li>';
+$stats_list['no_of_topics'] = '<li style="display:block; text-align:left; margin-bottom:2px; white-space:nowrap;"><span>'.sprintf($lang_index['No of topics'], '<strong>'.forum_number_format($forum_stats['total_topics']).'</strong>').'</span></li>';
+$stats_list['no_of_posts'] = '<li style="display:block; text-align:left; margin-bottom:2px; white-space:nowrap;"><span>'.sprintf($lang_index['No of posts'], '<strong>'.forum_number_format($forum_stats['total_posts']).'</strong>').'</span></li>';
 
 ($hook = get_hook('in_stats_pre_info_output')) ? eval($hook) : null;
 
