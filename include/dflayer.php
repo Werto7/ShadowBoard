@@ -209,6 +209,29 @@
             return $updated; //Number of updated entries
         }
         
+        public function getUserByID($userName) {
+            $file_path = $this->df_name . '/users.json';
+
+            if (!file_exists($file_path)) {
+                throw new Exception("User file not found: $file_path");
+            }
+
+            $content = file_get_contents($file_path);
+            $users = json_decode($content, true);
+
+            if (!is_array($users)) {
+                throw new Exception("User data invalid or empty.");
+            }
+
+            foreach ($users as $user) {
+                if (isset($user['username']) && $user['username'] === $userName) {
+                    return $user['id']; //ID found
+                }
+            }
+
+            return null;
+        }
+        
         private function delete_from_file($file_path, $where_condition)
         {
             $file_content = file($file_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
