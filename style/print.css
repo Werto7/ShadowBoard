@@ -592,7 +592,7 @@ ul#brd-admod {
     float: left
 }
 .posting {
-    text-align: right;
+    text-align: left;
     float: right
 }
 .paging {
@@ -641,7 +641,7 @@ ul#brd-admod {
     white-space: nowrap
 }
 #brd-stats ul li.st-activity {
-    text-align: right;
+    text-align: left;
     display: block;
     white-space: nowrap
 }
@@ -784,11 +784,10 @@ p.forum-noview .info-replies {
 .main-item .item-subject,
 .main-content .main-item li {
     float: left;
-    border-left-style: solid;
-    border-left-width: 1px;
+    
     margin: 0 -2px -9.7em 0;
     position: relative;
-    padding-top: .6em;
+    
     padding-bottom: 10.4em
 }
 .main-item .item-subject {
@@ -816,10 +815,13 @@ li.info-lastpost cite {
 .main-item li strong {
     font-weight: normal
 }
+
 .main-content .main-item {
-    padding-right: 35em;
-    padding-left: 3.75em
+  padding-top: 0.75em;
+  padding-left: 1.00em;
+  padding-right: 0 !important;
 }
+
 .main-content .main-item .hn {
     position: relative
 }
@@ -868,7 +870,7 @@ li.info-lastpost cite {
 }
 .item-subject .hn,
 .item-subject p {
-    margin: 0 0 0 1.5em
+    margin: 0 0 0 0em
 }
 li.info-lastpost cite,
 li.info-lastpost span,
@@ -898,8 +900,9 @@ li.info-lastpost strong {
     width: 0;
     float: left;
     margin-top: .667em;
-    margin-left: -2.417em
+    margin-left: -2.417em;
 }
+
 .main-content .main-item .hn .posted-mark {
     position: absolute;
     font-size: 2em;
@@ -2493,6 +2496,8 @@ button[disabled]:focus {
   .brd {
     min-width: auto !important;
     width: 100% !important;
+    padding: 0 !important;
+    overflow-x: hidden;
   }
 
   /* 2) Less padding in all .gen-content boxes */
@@ -2500,7 +2505,7 @@ button[disabled]:focus {
     padding: 0.5em 1em !important;
     margin-top: 0 !important;
     max-width: 100%;
-  overflow-x: hidden;
+    overflow-x: hidden;
   }
 
   /* 3) Optimize header area for mobile */
@@ -2523,20 +2528,65 @@ button[disabled]:focus {
 
   /* 4) Customize "Welcome" and link options */
   #welcome {
-    display: block !important;
-    float: none !important;
-    margin: 0 0 5px 0 !important;
-    padding: 0 !important;
-    clear: both !important;
+    display: block !important;
+    margin: 0 0 5px 0 !important;
+    clear: both !important;
+  }
+
+  p.options {
+    display: block !important;
+    margin-top: 5px !important;
+    margin-left: 0 !important;
+    clear: both !important;
+  }
+
+  #visit-new,
+  #visit-recent,
+  #visit-unanswered {
+    display: block !important;
+    margin-left: 0 !important;
+    margin-top: 5px !important;
+    text-align: left !important;
+  }
+
+  #brd-visit #visit-links {
+    text-align: left;
+    float: none
   }
-  .first-item,
-  p.options {
-    display: inline-block !important;
+  
+  /* Date (posthead) */
+  .posthead {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    border-left: none !important;
+  }
+
+  /* Author Box (postbody) */
+  .postbody {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    border-left: none !important;
+  }
+
+  /* Footer (postfoot) */
+  .postfoot {
+    padding-left: 0 !important;
+  }
+
+  /* Remove float/width of all inner elements */
+  .post-author,
+  .post-entry,
+  .posthead .post-byline,
+  .postfoot .post-contacts,
+  .postfoot .post-options {
     float: none !important;
     width: auto !important;
-    margin: 0 0 0 10px !important; /* Distance between links */
-    clear: none !important;
-    text-align: left !important;
-    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Make sure the content is not cut off */
+  .entry-content {
+    overflow: visible !important;
   }
 }
